@@ -11,6 +11,15 @@ ENV/
 env.bak/
 venv.bak/
 
+# 敏感配置（含 app_secret / api_key，不提交到云端）
+configs/config.yaml
+
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
 # Logs
 logs/
 *.log
