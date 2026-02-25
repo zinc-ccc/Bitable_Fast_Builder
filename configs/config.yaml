@@ -1,0 +1,11 @@
+lark:
+  app_id: "cli_a9005210bc39dcc2"
+  app_secret: "0rcrb9aXFJuVvDiJOcDrDdoncU3avxNq"
+
+openai:  # 或其他模型提供方
+  api_key: "YOUR_API_KEY"
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4"
+
+settings:
+  default_folder_token: "" # 创建 Bitable 的默认文件夹
