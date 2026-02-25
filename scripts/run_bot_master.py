@@ -14,7 +14,7 @@ with open("configs/config.yaml", 'r', encoding='utf-8') as f:
 bitable_client = BitableClient()
 summarizer = WeeklySummarizer()
 HECS_APP_TOKEN = "EPrYb1tWeaQrk7s0hp5c4vKrnlh"
-WEEKLY_REPORT_TABLE_ID = "tblturHfi3V2xlPo"  # HRBP业务周报表
+WEEKLY_REPORT_TABLE_ID = "tblsq8b5JhivRD1x"  # HRBP周报 (V3.0_Final)
 
 # 事件去重：记录已处理的 message_id，防止重复回复
 _processed_message_ids = deque(maxlen=200)
