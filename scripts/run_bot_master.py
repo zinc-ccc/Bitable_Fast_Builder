@@ -3,6 +3,7 @@ import yaml
 import json
 import requests
 from core.bitable import BitableClient
+from core.weekly_summarizer import WeeklySummarizer
 
 from collections import deque
 
@@ -11,7 +12,9 @@ with open("configs/config.yaml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 bitable_client = BitableClient()
+summarizer = WeeklySummarizer()
 HECS_APP_TOKEN = "EPrYb1tWeaQrk7s0hp5c4vKrnlh"
+WEEKLY_REPORT_TABLE_ID = "tblffLH43wWopBUC"  # HRBP业务周报表
 
 # 事件去重：记录已处理的 message_id，防止重复回复
 _processed_message_ids = deque(maxlen=200)
@@ -134,6 +137,52 @@ def sync_group_members(chat_id):
         return f"同步过程中出现错误: {str(e)}"
 
 
+def summarize_weekly_reports():
+    """
+    扫描 HRBP 周报表中「没有 AI 核心要点」的记录，
+    调用 LLM 生成总结，回写到「AI核心要点」字段。
+    """
+    try:
+        records = bitable_client.list_records(HECS_APP_TOKEN, WEEKLY_REPORT_TABLE_ID)
+        if not records:
+            return "周报表暂无记录。"
+
+        pending = [
+            r for r in records
+            if not r.get("fields", {}).get("AI核心要点", "").strip()
+        ]
+
+        if not pending:
+            return "所有周报已有 AI 总结，无需补充。"
+
+        ok_count = 0
+        fail_count = 0
+        for record in pending:
+            record_id = record.get("record_id", "")
+            fields = record.get("fields", {})
+            name = fields.get("汇报人") or record_id
+            print(f"  [总结] 处理: {name}")
+
+            summary = summarizer.summarize(fields)
+            if summary:
+                bitable_client.update_record(
+                    HECS_APP_TOKEN, WEEKLY_REPORT_TABLE_ID, record_id,
+                    {"AI核心要点": summary}
+                )
+                ok_count += 1
+            else:
+                fail_count += 1
+
+        reply = f"已完成 AI 要点补全，成功 {ok_count} 条"
+        if fail_count:
+            reply += f"，{fail_count} 条调用失败（请检查模型配置）"
+        reply += "。"
+        return reply
+    except Exception as e:
+        print(f"Summarize Error: {e}")
+        return f"调用 AI 总结时出错: {str(e)}"
+
+
 def handle_im_message(data: lark.CustomizedEvent):
     """
     处理收到的飞书消息事件 (im.message.receive_v1)
@@ -164,6 +213,10 @@ def handle_im_message(data: lark.CustomizedEvent):
         if any(k in text for k in ["识别", "同步", "拉取"]):
             print(">>> 触发同步指令，正在执行...")
             resp_text = sync_group_members(chat_id)
+            bitable_client.send_message(chat_id, "chat_id", resp_text)
+        elif "总结" in text:
+            print(">>> 触发 AI 总结指令，正在执行...")
+            resp_text = summarize_weekly_reports()
             bitable_client.send_message(chat_id, "chat_id", resp_text)
 
     except Exception as e:
