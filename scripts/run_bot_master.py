@@ -14,7 +14,7 @@ with open("configs/config.yaml", 'r', encoding='utf-8') as f:
 bitable_client = BitableClient()
 summarizer = WeeklySummarizer()
 HECS_APP_TOKEN = "EPrYb1tWeaQrk7s0hp5c4vKrnlh"
-WEEKLY_REPORT_TABLE_ID = "tblffLH43wWopBUC"  # HRBP业务周报表
+WEEKLY_REPORT_TABLE_ID = "tblturHfi3V2xlPo"  # HRBP业务周报表
 
 # 事件去重：记录已处理的 message_id，防止重复回复
 _processed_message_ids = deque(maxlen=200)
@@ -26,6 +26,10 @@ def sync_group_members(chat_id):
     try:
         members = bitable_client.get_chat_members(chat_id)
         if not members: return "未能获取群成员列表，请检查机器人群权限。"
+        
+        # 拓取群肃名称
+        chat_name = bitable_client.get_chat_name(chat_id)
+        print(f"[扫描群] {chat_name or chat_id}")
         
         # 找到 T03
         url_tables = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{HECS_APP_TOKEN}/tables"
@@ -104,6 +108,7 @@ def sync_group_members(chat_id):
                 continue
 
             fields = {
+                "群聊名称": chat_name,  # 抓不到时为空，可人工填写
                 "HRBP": name,
                 "人员ID": user_id,
                 "群聊ID": chat_id,

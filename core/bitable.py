@@ -160,6 +160,20 @@ class BitableClient:
             return res.json().get("data", {}).get("items", [])
         return []
 
+    def get_chat_name(self, chat_id):
+        """
+        获取群聊名称
+        API: GET /open-apis/im/v1/chats/{chat_id}
+        """
+        url = f"https://open.feishu.cn/open-apis/im/v1/chats/{chat_id}"
+        headers = {"Authorization": f"Bearer {self.get_token()}"}
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get("code") == 0:
+            return data.get("data", {}).get("name", "")
+        print(f"  [get_chat_name] 失败 chat_id={chat_id} code={data.get('code')} msg={data.get('msg')}")
+        return ""
+
     def send_message(self, receive_id, receive_id_type, content):
         """
         发送消息给用户或群
