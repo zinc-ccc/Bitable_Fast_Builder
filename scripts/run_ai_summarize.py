@@ -23,6 +23,7 @@ import sys
 import os
 import re
 import time
+import hashlib
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -102,6 +103,15 @@ def build_module_map(all_fields: list) -> list:
     return module_map
 
 
+def _compute_content_hash(module_texts: dict) -> str:
+    """
+    对一条记录的所有原始内容进行哈希，用于检测 BP 是否编辑过内容。
+    最终输出是一个定长 8 位字符串，写入小表内的「内容指纹」字段。
+    """
+    combined = "|".join(f"{k}:{v}" for k, v in sorted(module_texts.items()))
+    return hashlib.md5(combined.encode("utf-8")).hexdigest()[:8]
+
+
 # ── 主函数 ──────────────────────────────────────────────
 def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = True,
                   force: bool = False) -> str:
@@ -151,6 +161,18 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
         # 每 BP 的全部原始内容（供议程使用）
         bp_raw_parts = []
 
+        # 收集所有模块的原始内容，用于内容哈希计算
+        raw_content_map = {}
+        for raw_field, summary_field, module_name in module_map:
+            raw_content_map[raw_field] = _extract_text(fields.get(raw_field, "")).strip()
+
+        # 计算当前内容的哈希指纹并与表中已存的对比
+        current_hash = _compute_content_hash(raw_content_map)
+        stored_hash  = _extract_text(fields.get("内容指纹", "")).strip()
+        content_changed = (current_hash != stored_hash)
+        if content_changed:
+            new_fields["内容指纹"] = current_hash  # 更新存储的哈希字段
+
         # 自动计算 周索引 和 汇报标识
         create_ts = fields.get("创建时间")
         if create_ts:
@@ -169,18 +191,18 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
                 new_fields["汇报标识_系统自动"] = f"{reporter}-{calc_report_tag}" # 加上汇报人，确保标识清晰
 
         for raw_field, summary_field, module_name in module_map:
-            raw_content = _extract_text(fields.get(raw_field, "")).strip()
+            raw_content = raw_content_map[raw_field]
 
             # 聚合原始内容给议程
             if raw_content:
-                bp_raw_parts.append(f"【{module_name}】{raw_content}")
+                bp_raw_parts.append(f"「{module_name}」{raw_content}")
 
-            # 判断是否已有摘要
+            # 内容指纹未变且已有摘要 → 跳过（不消耗 token）
             existing_summary = _extract_text(fields.get(summary_field, "")).strip()
-            if existing_summary and not force:
+            if existing_summary and not content_changed and not force:
                 total_skipped += 1
                 if verbose:
-                    print(f"  ✓ 已有摘要，跳过: {reporter} — {module_name}")
+                    print(f"  ✓ 内容未变，跳过: {reporter} — {module_name}")
                 continue
 
             # 原始内容为空 → 不写任何东西
@@ -197,7 +219,9 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
                     print(f"  📝 内容极短，直接写入: {reporter} — {module_name}: {raw_content!r}")
                 continue
 
-            # 调用 AI 生成摘要
+            # 调用 AI 生成摘要（内容已变或摘要为空）
+            if verbose:
+                print(f"  🤖 内容已变，重新生成摘要: {reporter} — {module_name}")
             summary = ai.summarize_module(module_name, raw_content)
             if summary:
                 new_fields[summary_field] = summary
@@ -206,18 +230,18 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
         # 聚合议程内容并生成个体议程
         if bp_raw_parts:
             highlights_raw = _extract_text(fields.get("本周需重点汇报模块", ""))
-            bp_content_for_ai = f"【BP勾选重点：{highlights_raw or '未勾选'}】\n" + "\n".join(bp_raw_parts)
+            bp_content_for_ai = f"「BP勾选重点：{highlights_raw or '未勾选'}」\n" + "\n".join(bp_raw_parts)
 
             existing_agenda = _extract_text(fields.get("AI议程建议", "")).strip()
-            if existing_agenda and not force:
-                if verbose:
-                    print(f"  ✓ 已有个体AI议程，跳过: {reporter}")
-            else:
+            # 内容发生变化或尚无议程时，重新生成
+            if not existing_agenda or content_changed or force:
                 agenda = ai.generate_individual_agenda(bp_content_for_ai)
                 if agenda:
                     new_fields["AI议程建议"] = agenda
                     if verbose:
                         print(f"  🤖 已提炼个体议程: {reporter}")
+            elif verbose:
+                print(f"  ✓ 议程未变，跳过: {reporter}")
 
         if new_fields:
             updates_needed.append({"record_id": record_id, "fields": new_fields})

@@ -579,7 +579,7 @@ def render_screen_view(records, modules):
                     f'<span style="font-size:0.75rem;color:#6e7681">{ts_str}</span></div>'
                 )
             st.markdown(
-                f'<div class="order-panel"><b>📋 汇报顺序</b>{items_html}</div>',
+                f'<div class="order-panel"><b>📋 填写顺序</b>{items_html}</div>',
                 unsafe_allow_html=True,
             )
 
