@@ -203,55 +203,42 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
                 new_fields[summary_field] = summary
                 total_ai += 1
 
+        # 聚合议程内容并生成个体议程
+        if bp_raw_parts:
+            highlights_raw = _extract_text(fields.get("本周需重点汇报模块", ""))
+            bp_content_for_ai = f"【BP勾选重点：{highlights_raw or '未勾选'}】\n" + "\n".join(bp_raw_parts)
+
+            existing_agenda = _extract_text(fields.get("AI议程建议", "")).strip()
+            if existing_agenda and not force:
+                if verbose:
+                    print(f"  ✓ 已有个体AI议程，跳过: {reporter}")
+            else:
+                agenda = ai.generate_individual_agenda(bp_content_for_ai)
+                if agenda:
+                    new_fields["AI议程建议"] = agenda
+                    if verbose:
+                        print(f"  🤖 已提炼个体议程: {reporter}")
+
         if new_fields:
             updates_needed.append({"record_id": record_id, "fields": new_fields})
 
-        # 聚合议程内容
-        if bp_raw_parts:
-            highlights_raw = _extract_text(fields.get("本周需重点汇报模块", ""))
-            agenda_source_parts.append(
-                f"【{reporter}（BP勾选重点：{highlights_raw or '未勾选'}）】\n" +
-                "\n".join(bp_raw_parts)
-            )
-
-    # 3. 写回摘要
+    # 3. 写回摘要与议程
     ok_count = 0
     if updates_needed:
         if verbose:
-            print(f"\n📝 写回 {len(updates_needed)} 条记录的摘要字段...")
+            print(f"\n📝 写回 {len(updates_needed)} 条记录的摘要/议程字段...")
         ok_count = bitable.batch_update_records(app_token, table_id, updates_needed)
 
-    # 4. 自动生成 AI 议程建议（基于原始内容，分析风险）
-    agenda_result = ""
-    if agenda_source_parts:
-        if verbose:
-            print("\n🤖 生成 AI 议程建议...")
-        full_raw_text = "\n\n".join(agenda_source_parts)
-        agenda_text = ai.generate_agenda_from_raw(full_raw_text)
-
-        if agenda_text:
-            # 写入所有记录的 AI议程建议 字段
-            agenda_updates = [
-                {"record_id": rec["record_id"], "fields": {"AI议程建议": agenda_text}}
-                for rec in records
-            ]
-            agenda_ok = bitable.batch_update_records(app_token, table_id, agenda_updates)
-            agenda_result = f"，议程建议已同步 {agenda_ok} 条"
-            if verbose:
-                print(f"  ✅ AI议程建议写回完成（{agenda_ok} 条）")
-
-    # 5. 汇总结果
+    # 4. 汇总结果
     result_parts = []
     if ok_count:
-        result_parts.append(f"摘要写回 {ok_count} 条记录")
+        result_parts.append(f"智能内容写回 {ok_count} 条记录")
     if total_ai:
         result_parts.append(f"AI生成 {total_ai} 个模块")
     if total_short:
         result_parts.append(f"短内容直写 {total_short} 个")
     if total_skipped:
         result_parts.append(f"跳过已有摘要 {total_skipped} 个")
-    if agenda_result:
-        result_parts.append(f"AI议程已更新")
 
     result = "、".join(result_parts) + "。" if result_parts else "所有摘要均已处理或无需更新。"
     if verbose:

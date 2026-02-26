@@ -1,0 +1,84 @@
+[
+  {
+    "AI议程建议": "【风险预警】招聘模块存在卡点：Zinc.Zheng汇报中“offer待入职”状态需跟进，存在候选人流失风险。\n【遗漏关注】Zinc.Zheng未勾选“招聘”为重点，但其内容（入职、待入职）是本周核心进展，需关注。\n【共性议题】暂无。各BP汇报模块独立，未形成跨BP共同议题。\n【议程建议】1. 跟进Zinc.Zheng负责的待入职offer进展与风险。2. 讨论Agent（AI提效）实践进展与后续规划。3. 审视各BP周报重点勾选与实际内容的匹配度。",
+    "Agent实践与进展": "222222",
+    "下周计划与卡点": "5",
+    "业务部门情况反馈": "4",
+    "人员情况": "3",
+    "其他专项工作": null,
+    "创建时间": 1772036208000,
+    "周索引": "26M2W4",
+    "所属小组": [
+      "optT4KKbTS"
+    ],
+    "招聘进展与HC确认": "111111",
+    "摘要_Agent": "222222",
+    "摘要_专项": null,
+    "摘要_业务": "4",
+    "摘要_人员": "3",
+    "摘要_招聘": "111111",
+    "摘要_计划": "5",
+    "最后更新时间": 1772082644000,
+    "本周需重点汇报模块": null,
+    "汇报人": {
+      "avatar_url": "https://s1-imfile.feishucdn.com/static-resource/v1/v3_00t7_6e1cdc5b-e1e4-4aa1-81c0-fdbee4c2a80g~?image_size=72x72&cut_type=default-face&quality=&format=jpeg&sticker_format=.webp",
+      "email": "zinc.zheng@fjdynamics.com",
+      "en_name": "Zinc.Zheng",
+      "id": "ou_2874d7ea6adbab84fa94a8f9c109df84",
+      "name": "Zinc.Zheng"
+    },
+    "汇报标识_系统自动": [
+      {
+        "text": "Zinc.Zheng_26M2W4_周报",
+        "type": "text"
+      }
+    ],
+    "需汇报_Agent": false,
+    "需汇报_业务": false,
+    "需汇报_人员": null,
+    "需汇报_招聘": true,
+    "需汇报_计划": false
+  },
+  {
+    "AI议程建议": "【风险预警】招聘模块存在卡点：Zinc.Zheng汇报中“offer待入职”状态需跟进，存在候选人流失风险。\n【遗漏关注】Zinc.Zheng未勾选“招聘”为重点，但其内容（入职、待入职）是本周核心进展，需关注。\n【共性议题】暂无。各BP汇报模块独立，未形成跨BP共同议题。\n【议程建议】1. 跟进Zinc.Zheng负责的待入职offer进展与风险。2. 讨论Agent（AI提效）实践进展与后续规划。3. 审视各BP周报重点勾选与实际内容的匹配度。",
+    "Agent实践与进展": "本月AI提效进展较佳，实现周会看板、多维表管理利用AI搭建；群聊机器人智能抓取信息，建议后续部门知识库，可以采用代码形式维护，在多端同步更新，方便汇总",
+    "下周计划与卡点": "下周继续专注AI提效，同时聚焦流程后期人选谈薪、offer情况",
+    "业务部门情况反馈": null,
+    "人员情况": "暂无",
+    "其他专项工作": null,
+    "创建时间": 1772075444000,
+    "周索引": "26M2W4",
+    "所属小组": [
+      "optT4KKbTS"
+    ],
+    "招聘进展与HC确认": "本月入职Local 2位 (荷比卢FAE、葡萄牙销售)，offer 待入职Local 2位 (墨西哥销售)；",
+    "摘要_Agent": "AI提效进展佳，搭建看板、多维表及群聊机器人。",
+    "摘要_专项": null,
+    "摘要_业务": null,
+    "摘要_人员": "暂无",
+    "摘要_招聘": "Local入职2人，2人待入职。",
+    "摘要_计划": "AI提效与后期谈薪、offer跟进并行。",
+    "最后更新时间": 1772082624000,
+    "本周需重点汇报模块": [
+      "Agent实践与进展"
+    ],
+    "汇报人": {
+      "avatar_url": "https://s1-imfile.feishucdn.com/static-resource/v1/v3_00t7_6e1cdc5b-e1e4-4aa1-81c0-fdbee4c2a80g~?image_size=72x72&cut_type=default-face&quality=&format=jpeg&sticker_format=.webp",
+      "email": "zinc.zheng@fjdynamics.com",
+      "en_name": "Zinc.Zheng",
+      "id": "ou_2874d7ea6adbab84fa94a8f9c109df84",
+      "name": "Zinc.Zheng"
+    },
+    "汇报标识_系统自动": [
+      {
+        "text": "Zinc.Zheng_26M2W4_周报",
+        "type": "text"
+      }
+    ],
+    "需汇报_Agent": true,
+    "需汇报_业务": null,
+    "需汇报_人员": null,
+    "需汇报_招聘": null,
+    "需汇报_计划": null
+  }
+]

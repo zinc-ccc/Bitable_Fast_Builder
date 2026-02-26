@@ -106,7 +106,7 @@ class BitableClient:
     # ── Record operations ────────────────────────────
     def list_records(self, app_token, table_id, filter_str="", page_size=500):
         url = (f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
-               f"/tables/{table_id}/records?page_size={page_size}")
+               f"/tables/{table_id}/records?page_size={page_size}&display_formula_ref=true")
         if filter_str:
             url += f"&filter={filter_str}"
         data = requests.get(url, headers=self._headers()).json()

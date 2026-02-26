@@ -9,7 +9,8 @@ V4.1 修订：
   - 老板复选框 = 新增汇报模块（合并到 BP 已选，非覆盖）
   - 投屏：显示集合 = BP勾选 ∪ 老板新增
   - AI议程 → 只读展示（由脚本写回，无需看板内点击）
-  - 密码保护老板审阅 & 历史数据
+   - 密码保护老板审阅 & 历史数据
+   - 动态全局与个体 AI 议程生成
 """
 
 import streamlit as st
@@ -267,11 +268,23 @@ def get_display_content(fields: dict, raw_field, summary_field: str) -> str:
 
 
 # ═══════════════════════════════════════════════
-# 数据加载
+# 数据加载与缓存逻辑
 # ═══════════════════════════════════════════════
 @st.cache_data(ttl=60)
 def load_records():
+    # 强制使长期运行的 Streamlit 进程热加载最新的 bitable.py，解决 Lookup 字段解析缓存异常
+    import sys, importlib
+    if 'core.bitable' in sys.modules:
+        importlib.reload(sys.modules['core.bitable'])
+        global BitableClient, bitable
+        from core.bitable import BitableClient
+        bitable = BitableClient()
     return bitable.list_records(APP_TOKEN, TABLE_ID)
+
+@st.cache_data(ttl=3600)
+def get_global_agenda(records_str: str) -> str:
+    ai_helper = AIHelper()
+    return ai_helper.summarize_global_agenda(records_str)
 
 
 def get_week_options(records):
@@ -297,8 +310,8 @@ def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
                 uid = bitable.get_bp_user_id(APP_TOKEN, bp_config_id, reporter)
                 if uid:
                     msg = (f"📌 你好 {reporter}！\n"
-                           f"管理层在 {label} 模块标注了重点指引，"
-                           f"请在周会上重点准备并输出核心结论（此项为管理层重点关注，非重复你在系统内勾选的部分）。")
+                           f"负责人在 {label} 模块额外标注了重点，"
+                           f"请在周会上重点准备并汇报该模块内容（这是负责人新增，并非重复你已勾选的部分）。")
                     push_res = bitable.send_message(uid, "open_id", msg)
                     if push_res.get("code") == 0:
                         st.toast(f"✅ 已通知 {reporter} 关注「{label}」", icon="📬")
@@ -347,15 +360,24 @@ def render_review_view(records, modules):
     st.markdown('<div class="view-title">📊 负责人审阅 — 团队内容全景</div>',
                 unsafe_allow_html=True)
 
-    # ── AI 议程（只读，由脚本写回）
-    existing_agenda = extract_text(records[0]["fields"].get(FIELD_AI_AGENDA, "")).strip() if records else ""
-    if existing_agenda:
+    # ── AI 议程（全局汇报）
+    individual_agendas = []
+    for r in records:
+        f = r["fields"]
+        reporter  = extract_text(f.get(FIELD_REPORTER, "未知"))
+        agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
+        if agenda:
+            individual_agendas.append(f"【{reporter}】\n{agenda}")
+
+    if individual_agendas:
+        global_input = "\n\n".join(individual_agendas)
+        existing_agenda = get_global_agenda(global_input)
         st.markdown(
-            f'<div class="agenda-panel">🤖 <b>本周 AI 汇报议程分析</b>\n\n{existing_agenda}</div>',
+            f'<div class="agenda-panel">🤖 <b>团队周会全局议程洞察 (AI汇总)</b>\n\n{existing_agenda}</div>',
             unsafe_allow_html=True,
         )
     else:
-        st.info("📭 本周尚未生成 AI 议程分析。在机器人群组发送「生成摘要」可自动生成并写回多维表。")
+        st.info("📭 本周尚未生成个人AI议程。请通过群组发送「生成摘要」触发。")
 
     st.markdown("---")
 
@@ -379,6 +401,11 @@ def render_review_view(records, modules):
 
             with st.container():
                 st.markdown(f'<div class="bp-name">👤 {reporter}</div>', unsafe_allow_html=True)
+
+                # 展示个人的 AI 议程
+                indiv_agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
+                if indiv_agenda:
+                    st.markdown(f'<div style="font-size:0.85rem; color:#64748b; margin-bottom:12px; border-left:3px solid #cbd5e1; padding-left:10px;"><b>✨ 个人工作焦点提炼：</b>{indiv_agenda}</div>', unsafe_allow_html=True)
 
                 # 模块标签行
                 tags_html = ""

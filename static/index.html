@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HRBP 效能协同中心</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .bp-card {
+      transition: all .22s cubic-bezier(.4, 0, .2, 1);
+      border: 1px solid #e2e8f0;
+    }
+
+    .bp-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px -4px rgba(99, 102, 241, .13);
+      border-color: #818cf8;
+    }
+
+    .nav-active {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-right: 3px solid #3b82f6;
+      font-weight: 700;
+    }
+
+    .view-btn-active {
+      background: #1e40af;
+      color: #fff;
+    }
+
+    .col-header {
+      font-size: .68rem;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      padding: 0 0 10px 2px;
+    }
+
+    .prio-badge {
+      background: linear-gradient(135deg, #fef9c3, #fde68a);
+      color: #78350f;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .fade {
+      animation: fadeUp .28s ease;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(6px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 4px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+  <!-- NAV -->
+  <nav class="bg-white border-b sticky top-0 z-50 px-6 py-3 flex justify-between items-center shadow-sm">
+    <div class="flex items-center gap-3">
+      <div
+        class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-black tracking-tight">HRBP 效能协同中心</h1>
+        <p class="text-[9px] text-slate-400 font-semibold uppercase tracking-widest">Weekly Sync Dashboard</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <!-- Week -->
+      <div class="flex items-center gap-2 bg-slate-100 rounded-full px-3 py-1.5 border">
+        <svg class="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <select id="weekSel" onchange="onWeekChange()"
+          class="bg-transparent text-xs font-bold text-indigo-600 outline-none cursor-pointer pr-1">
+          <option value="">读取中...</option>
+        </select>
+      </div>
+      <!-- Views -->
+      <div class="flex gap-1 bg-slate-100 rounded-full p-1 text-xs font-bold">
+        <button onclick="switchView('review')" id="vb-review"
+          class="view-btn view-btn-active px-4 py-1.5 rounded-full transition-all">📋 综合审阅</button>
+        <button onclick="switchView('screen')" id="vb-screen"
+          class="view-btn px-4 py-1.5 rounded-full transition-all text-slate-400 hover:text-slate-600">🖥️ 会议投屏</button>
+        <button onclick="switchView('history')" id="vb-history"
+          class="view-btn px-4 py-1.5 rounded-full transition-all text-slate-400 hover:text-slate-600">📚 历史档案</button>
+      </div>
+      <!-- Module filter  -->
+      <select id="modSel" onchange="render()"
+        class="text-xs font-bold text-slate-600 bg-white border rounded-full px-3 py-1.5 outline-none cursor-pointer">
+        <option value="all">全部模块</option>
+        <option value="招聘">招聘与HC</option>
+        <option value="Agent">Agent进展</option>
+        <option value="人员">人员情况</option>
+        <option value="业务">业务情况</option>
+        <option value="专项">专项工作</option>
+        <option value="计划">下周计划</option>
+      </select>
+      <!-- AI -->
+      <button onclick="generateAgenda()"
+        class="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        AI 议程
+      </button>
+      <!-- Refresh / Rescan -->
+      <button onclick="loadData()" class="text-slate-400 hover:text-slate-600 transition-all" title="刷新数据">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      </button>
+      <button onclick="rescanFields()" class="text-slate-300 hover:text-indigo-400 transition-all text-[10px] font-bold"
+        title="重新扫描字段">⟳ 扫字段</button>
+      <span id="cntBadge" class="text-[10px] text-slate-300 font-bold border-l pl-3">— 条</span>
+    </div>
+  </nav>
+
+  <div class="flex h-[calc(100vh-57px)]">
+
+    <!-- SIDEBAR -->
+    <aside class="w-52 bg-white border-r flex flex-col shrink-0 overflow-y-auto">
+      <div class="p-4 flex-1">
+        <p class="text-[9px] font-black text-slate-400 uppercase tracking-[.2em] mb-3">汇报模块</p>
+        <nav class="space-y-0.5" id="sideModNav">
+          <button data-mod="all" onclick="sideModSwitch('all')"
+            class="smod nav-active w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs transition-all"><span
+              class="opacity-40">✦</span> 总览</button>
+          <button data-mod="招聘" onclick="sideModSwitch('招聘')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>01</span>
+            招聘与HC</button>
+          <button data-mod="Agent" onclick="sideModSwitch('Agent')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>02</span>
+            Agent进展</button>
+          <button data-mod="人员" onclick="sideModSwitch('人员')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>03</span>
+            人员情况</button>
+          <button data-mod="业务" onclick="sideModSwitch('业务')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>04</span>
+            业务情况</button>
+          <button data-mod="专项" onclick="sideModSwitch('专项')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>05</span>
+            专项工作</button>
+          <button data-mod="计划" onclick="sideModSwitch('计划')"
+            class="smod w-full text-left flex gap-3 items-center px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-all"><span>06</span>
+            下周计划</button>
+        </nav>
+      </div>
+      <div class="p-4 border-t text-[9px] text-slate-300 leading-relaxed">
+        <p class="font-bold text-slate-400 mb-1">数据说明</p>
+        <p>只读保护：BP 填写内容不做修改。</p>
+        <p class="mt-1">仅以下字段可写：<br>· 归档标识（负责人操作）<br>· AI议程建议（生成时写入）</p>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="flex-1 overflow-y-auto p-6">
+
+      <!-- AI Agenda Banner -->
+      <div id="agendaBanner"
+        class="hidden mb-5 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl flex gap-3 items-start fade">
+        <div
+          class="w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 mt-0.5">
+          AI</div>
+        <div class="flex-1">
+          <p class="text-[10px] font-black text-indigo-600 uppercase tracking-wide mb-1.5">本周 AI 汇报议程建议</p>
+          <p id="agendaTxt" class="text-sm text-slate-700 leading-relaxed whitespace-pre-line"></p>
+        </div>
+        <button onclick="document.getElementById('agendaBanner').classList.add('hidden')"
+          class="text-indigo-200 hover:text-indigo-500 text-lg leading-none flex-shrink-0">×</button>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading" class="py-20 text-center text-slate-300">
+        <div class="text-3xl mb-3 inline-block animate-spin">⏳</div>
+        <p class="text-sm font-bold">正在拉取多维表数据...</p>
+      </div>
+
+      <!-- Empty -->
+      <div id="empty" class="hidden py-20 text-center text-slate-300">
+        <div class="text-4xl mb-3">📭</div>
+        <p class="text-sm font-bold">当前条件下暂无数据</p>
+        <p class="text-xs mt-1">周次选择「全部」或等待 BP 提交表单后刷新</p>
+      </div>
+
+      <!-- VIEW: 综合审阅 -->
+      <div id="v-review" class="hidden fade">
+        <div class="grid grid-cols-2 gap-6">
+          <!-- 营销组 -->
+          <div>
+            <div class="col-header flex items-center gap-2"><span
+                class="w-2 h-2 bg-blue-400 rounded-full inline-block"></span>营销组</div>
+            <div id="rv-marketing" class="space-y-4"></div>
+            <div id="rv-marketing-empty" class="hidden text-xs text-slate-300 text-center py-8">营销组暂无数据</div>
+          </div>
+          <!-- 研发组 -->
+          <div>
+            <div class="col-header flex items-center gap-2"><span
+                class="w-2 h-2 bg-violet-400 rounded-full inline-block"></span>研发组</div>
+            <div id="rv-rd" class="space-y-4"></div>
+            <div id="rv-rd-empty" class="hidden text-xs text-slate-300 text-center py-8">研发组暂无数据</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: 会议投屏 -->
+      <div id="v-screen" class="hidden fade">
+        <div class="grid grid-cols-2 gap-6">
+          <div>
+            <div class="col-header flex items-center gap-2"><span
+                class="w-2 h-2 bg-blue-400 rounded-full inline-block"></span>营销组</div>
+            <div id="sc-marketing" class="space-y-5"></div>
+          </div>
+          <div>
+            <div class="col-header flex items-center gap-2"><span
+                class="w-2 h-2 bg-violet-400 rounded-full inline-block"></span>研发组</div>
+            <div id="sc-rd" class="space-y-5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: 历史档案 -->
+      <div id="v-history" class="hidden fade">
+        <div id="hist-content"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- DETAIL MODAL -->
+  <div id="modal"
+    class="fixed inset-0 bg-slate-900/50 hidden z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="px-6 py-4 border-b bg-slate-50 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <span id="m-group" class="tag bg-indigo-100 text-indigo-700"></span>
+          <span id="m-name" class="font-bold text-sm text-slate-800"></span>
+        </div>
+        <button onclick="closeModal()" class="text-slate-300 hover:text-slate-600 text-xl leading-none">×</button>
+      </div>
+      <div id="m-body" class="p-6 space-y-3 max-h-[60vh] overflow-y-auto"></div>
+      <div class="px-6 py-4 border-t bg-slate-50 flex justify-between items-center">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input id="m-archive" type="checkbox" class="w-4 h-4 accent-indigo-600" onchange="modalToggleArchive()">
+          <span class="text-xs font-bold text-slate-500">负责人已对齐，触发汇报提醒</span>
+        </label>
+        <button onclick="closeModal()"
+          class="px-5 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 transition-all">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI LOADING OVERLAY -->
+  <div id="aiLoading"
+    class="fixed inset-0 bg-white/80 hidden z-[200] flex flex-col items-center justify-center gap-4 backdrop-blur-sm">
+    <div class="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+    <p class="text-sm font-bold text-slate-500">DeepSeek 正在生成本周议程建议...</p>
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────
+    let allRecords = [], currentView = 'review', currentMod = 'all', currentWeek = '';
+    let modalRecId = '', charts = {};
+
+    const MOD_LABELS = {
+      '招聘': '📋 招聘与 HC 确认',
+      'Agent': '🤖 Agent 实践进展',
+      '人员': '👥 人员情况反馈',
+      '业务': '💼 业务部门情况',
+      '专项': '📌 其他专项工作',
+      '计划': '📅 下周计划与卡点',
+    };
+    const PALETTE = ['#6366f1', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
+
+    // ── Boot ─────────────────────────────────────
+    window.onload = async () => {
+      await loadWeeks();
+      await loadData();
+    };
+
+    async function loadWeeks() {
+      const { weeks } = await fetch('/api/weeks').then(r => r.json()).catch(() => ({ weeks: [] }));
+      const sel = document.getElementById('weekSel');
+      sel.innerHTML = '<option value="">全部周次</option>';
+      weeks.forEach((w, i) => {
+        const o = document.createElement('option');
+        o.value = w; o.textContent = w; if (i === 0) o.selected = true;
+        sel.appendChild(o);
+      });
+      currentWeek = weeks[0] || '';
+    }
+
+    async function loadData() {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('empty').classList.add('hidden');
+      hideViews();
+      const url = currentWeek ? `/api/records?week=${encodeURIComponent(currentWeek)}` : '/api/records';
+      const { records } = await fetch(url).then(r => r.json()).catch(() => ({ records: [] }));
+      allRecords = records;
+      document.getElementById('cntBadge').textContent = `${records.length} 条`;
+      document.getElementById('loading').classList.add('hidden');
+      render();
+    }
+
+    function onWeekChange() {
+      currentWeek = document.getElementById('weekSel').value;
+      loadData();
+    }
+
+    async function rescanFields() {
+      await fetch('/api/refresh-fields', { method: 'POST' });
+      loadData();
+      showToast('✅ 字段已重新扫描');
+    }
+
+    // ── Filter helpers ────────────────────────────
+    function byGroup(g) {
+      return allRecords.filter(r => g === 'marketing' ? r.group.includes('营销') : r.group.includes('研发'));
+    }
+
+    function mods() {
+      return currentMod === 'all' ? Object.keys(MOD_LABELS) : [currentMod];
+    }
+
+    // ── View switching ────────────────────────────
+    function switchView(v) {
+      currentView = v;
+      ['review', 'screen', 'history'].forEach(id => {
+        const b = document.getElementById(`vb-${id}`);
+        b.classList.toggle('view-btn-active', id === v);
+        b.classList.toggle('text-slate-400', id !== v);
+        if (id === v) b.classList.remove('text-slate-400'); else b.classList.remove('view-btn-active');
+      });
+      render();
+    }
+
+    function sideModSwitch(mod) {
+      currentMod = mod;
+      document.getElementById('modSel').value = mod;
+      document.querySelectorAll('.smod').forEach(b => {
+        b.classList.toggle('nav-active', b.dataset.mod === mod);
+        if (b.dataset.mod !== mod) b.classList.add('text-slate-500'); else b.classList.remove('text-slate-500');
+      });
+      render();
+    }
+
+    function hideViews() {
+      ['v-review', 'v-screen', 'v-history'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    }
+
+    // ── Render dispatcher ─────────────────────────
+    function render() {
+      hideViews();
+      if (allRecords.length === 0) { document.getElementById('empty').classList.remove('hidden'); return; }
+      document.getElementById('empty').classList.add('hidden');
+      document.getElementById(`v-${currentView}`).classList.remove('hidden');
+      if (currentView === 'review') renderReview();
+      else if (currentView === 'screen') renderScreen();
+      else renderHistory();
+    }
+
+    // ── VIEW 1: 综合审阅 ──────────────────────────
+    function renderReview() {
+      const marketing = byGroup('marketing'), rd = byGroup('rd');
+      renderReviewGroup('rv-marketing', 'rv-marketing-empty', marketing);
+      renderReviewGroup('rv-rd', 'rv-rd-empty', rd);
+    }
+
+    function renderReviewGroup(containerId, emptyId, recs) {
+      const el = document.getElementById(containerId);
+      const em = document.getElementById(emptyId);
+      el.innerHTML = '';
+      if (!recs.length) { em.classList.remove('hidden'); return; }
+      em.classList.add('hidden');
+
+      recs.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'bp-card bg-white rounded-2xl p-5 cursor-pointer fade';
+        card.onclick = () => openModal(r);
+
+        // Header
+        const gColor = r.group.includes('营销') ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700';
+        let html = `<div class="flex justify-between items-start mb-3">
+      <div><p class="text-sm font-black text-slate-800">${r.reporter || '未知'}</p><span class="tag ${gColor} mt-1">${r.group || '—'}</span></div>
+      <label class="flex items-center gap-1.5 cursor-pointer" onclick="event.stopPropagation()">
+        <input type="checkbox" ${r.archived ? 'checked' : ''} class="w-3.5 h-3.5 accent-indigo-600 cursor-pointer" onchange="quickArchive('${r.record_id}',this.checked,'${r.reporter}')">
+        <span class="text-[10px] text-slate-400">已对齐</span>
+      </label>
+    </div>`;
+
+        // Priority tags
+        const hotMods = r.highlights.filter(h => mods().some(m => h.includes(m) || m === 'all'));
+        if (hotMods.length) html += `<div class="flex flex-wrap gap-1 mb-3">${hotMods.map(h => `<span class="prio-badge">🔥 ${h.slice(0, 8)}</span>`).join('')}</div>`;
+
+        // Module summaries
+        let modsHtml = '';
+        mods().forEach(mod => {
+          const m = r.modules[mod];
+          if (!m || (!m.content && !m.priority)) return;
+          const hot = m.highlighted || m.priority;
+          modsHtml += `<div class="p-2.5 rounded-xl border ${hot ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}">
+        <p class="text-[9px] font-black text-slate-400 uppercase mb-1">${MOD_LABELS[mod]}</p>
+        <p class="text-xs text-slate-700 leading-relaxed">${m.content || '（BP已标记重点，暂无AI摘要）'}</p>
+      </div>`;
+        });
+
+        html += `<div class="space-y-2">${modsHtml || '<p class="text-xs text-slate-300 text-center py-3">该模块暂无内容</p>'}</div>
+      <p class="text-right text-[10px] text-indigo-400 font-bold mt-3">查看原文 →</p>`;
+
+        card.innerHTML = html;
+        el.appendChild(card);
+      });
+    }
+
+    // ── VIEW 2: 会议投屏 ──────────────────────────
+    function renderScreen() {
+      Object.values(charts).forEach(c => c.destroy()); charts = {};
+      renderScreenGroup('sc-marketing', byGroup('marketing'));
+      renderScreenGroup('sc-rd', byGroup('rd'));
+    }
+
+    function renderScreenGroup(containerId, recs) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = '';
+
+      mods().forEach((mod, mi) => {
+        const label = MOD_LABELS[mod];
+        const prioRecs = recs.filter(r => (r.modules[mod]?.priority || r.modules[mod]?.highlighted) && r.modules[mod]?.content);
+        if (!prioRecs.length) return;
+
+        const panel = document.createElement('div');
+        panel.className = 'bg-white rounded-2xl p-5 border border-slate-100 shadow-sm fade';
+        const chartId = `chart-${containerId}-${mod}`;
+        panel.innerHTML = `<p class="text-xs font-black text-slate-700 mb-3">${label}</p>
+      <div style="height:180px;position:relative"><canvas id="${chartId}"></canvas></div>
+      <div id="det-${containerId}-${mod}" class="mt-3 space-y-1.5"></div>`;
+        el.appendChild(panel);
+
+        setTimeout(() => {
+          const ctx = document.getElementById(chartId)?.getContext('2d');
+          if (!ctx) return;
+          charts[chartId] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: prioRecs.map(r => r.reporter),
+              datasets: [{ data: prioRecs.map(() => 1), backgroundColor: PALETTE.slice(0, prioRecs.length), borderWidth: 2, borderColor: '#fff' }]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false, cutout: '60%',
+              plugins: { legend: { display: false } },
+              onClick: (e, items) => { if (items.length) openModal(prioRecs[items[0].index]); }
+            }
+          });
+          const det = document.getElementById(`det-${containerId}-${mod}`);
+          prioRecs.forEach((r, i) => {
+            const d = document.createElement('div');
+            d.className = 'flex items-start gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg';
+            d.onclick = () => openModal(r);
+            d.innerHTML = `<div class="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style="background:${PALETTE[i % PALETTE.length]}"></div>
+          <div><p class="text-[11px] font-bold text-slate-700">${r.reporter}</p>
+          <p class="text-[10px] text-slate-400">${(r.modules[mod].content || '').slice(0, 55)}...</p></div>`;
+            det.appendChild(d);
+          });
+        }, 60);
+      });
+
+      if (!el.innerHTML) {
+        el.innerHTML = '<p class="text-xs text-slate-300 py-10 text-center">本组无重点标记模块</p>';
+      }
+    }
+
+    // ── VIEW 3: 历史档案 ──────────────────────────
+    function renderHistory() {
+      const sec = document.getElementById('hist-content');
+      sec.innerHTML = '';
+      const byWeek = {};
+      // Use ALL records (not just current week) for history
+      fetch('/api/records').then(r => r.json()).then(({ records }) => {
+        records.forEach(r => {
+          const w = r.week || '未记录周次';
+          if (!byWeek[w]) byWeek[w] = [];
+          byWeek[w].push(r);
+        });
+        Object.keys(byWeek).sort().reverse().forEach(week => {
+          const wRecs = byWeek[week];
+          const block = document.createElement('div');
+          block.className = 'mb-8 fade';
+          block.innerHTML = `<div class="flex items-center gap-3 mb-3">
+        <span class="text-xs font-black bg-white border rounded-full px-3 py-1 shadow-sm text-slate-600">📅 ${week}</span>
+        <div class="flex-1 border-t border-dashed border-slate-200"></div>
+        <span class="text-[10px] text-slate-400">${wRecs.length} 条</span>
+      </div>
+      <div class="grid grid-cols-2 gap-4" id="hw-${week.replace(/\s/g, '_')}"></div>`;
+          sec.appendChild(block);
+          const grid = block.querySelector(`#hw-${week.replace(/\s/g, '_')}`);
+          wRecs.forEach(r => {
+            const gc = r.group.includes('营销') ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700';
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-xl p-4 border border-slate-100 cursor-pointer hover:shadow-md transition-all fade';
+            card.onclick = () => openModal(r);
+            let mHtml = '';
+            mods().forEach(mod => {
+              const m = r.modules[mod];
+              if (!m?.content) return;
+              mHtml += `<div class="mt-2"><p class="text-[9px] font-black text-slate-400 uppercase">${MOD_LABELS[mod]}</p>
+            <p class="text-[11px] text-slate-600 leading-snug mt-0.5">${m.content.slice(0, 70)}...</p></div>`;
+            });
+            card.innerHTML = `<div class="flex items-center gap-2 mb-1">
+          <p class="text-xs font-bold text-slate-800">${r.reporter}</p><span class="tag ${gc}">${r.group}</span>
+          ${r.archived ? '<span class="tag bg-green-50 text-green-600 ml-auto">已对齐</span>' : ''}
+        </div>${mHtml || '<p class="text-[11px] text-slate-300 mt-2">该模块无内容</p>'}`;
+            grid.appendChild(card);
+          });
+        });
+        if (!sec.innerHTML) sec.innerHTML = '<p class="text-center text-slate-300 py-16 text-sm">暂无历史记录</p>';
+      });
+    }
+
+    // ── Modal ─────────────────────────────────────
+    function openModal(r) {
+      modalRecId = r.record_id;
+      const gc = r.group.includes('营销') ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700';
+      document.getElementById('m-group').className = `tag ${gc}`;
+      document.getElementById('m-group').textContent = r.group;
+      document.getElementById('m-name').textContent = r.reporter;
+      document.getElementById('m-archive').checked = r.archived;
+      const body = document.getElementById('m-body');
+      body.innerHTML = '';
+      Object.entries(r.modules).forEach(([mod, data]) => {
+        if (!data.content && !data.raw) return;
+        const hot = data.highlighted || data.priority;
+        const div = document.createElement('div');
+        div.className = `p-4 rounded-xl border ${hot ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`;
+        div.innerHTML = `<div class="flex items-center gap-2 mb-2">
+        <p class="text-[10px] font-black text-slate-400 uppercase">${MOD_LABELS[mod]}</p>
+        ${hot ? '<span class="prio-badge">重点</span>' : ''}
+      </div>
+      ${data.content ? `<div class="mb-2"><p class="text-[9px] text-indigo-500 font-black uppercase mb-1">AI摘要</p><p class="text-xs text-slate-700 leading-relaxed">${data.content}</p></div>` : ''}
+      ${data.raw ? `<div><p class="text-[9px] text-slate-400 font-black uppercase mb-1">原文填报</p><p class="text-xs text-slate-500 leading-relaxed italic whitespace-pre-wrap">${data.raw}</p></div>` : ''}`;
+        body.appendChild(div);
+      });
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+    async function modalToggleArchive() {
+      const val = document.getElementById('m-archive').checked;
+      const r = allRecords.find(x => x.record_id === modalRecId);
+      if (!r) return;
+      r.archived = val;
+      await fetch('/api/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record_id: modalRecId, value: val, reporter: r.reporter }) });
+      showToast(val ? `📬 已对齐 · ${r.reporter} 即将收到提醒` : '已取消对齐标记');
+      render();
+    }
+
+    async function quickArchive(rid, val, reporter) {
+      const r = allRecords.find(x => x.record_id === rid);
+      if (r) r.archived = val;
+      await fetch('/api/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record_id: rid, value: val, reporter }) });
+      showToast(val ? `📬 ${reporter} 将收到汇报准备提醒` : `已取消 ${reporter} 的对齐标记`);
+    }
+
+    // ── AI Agenda ─────────────────────────────────
+    async function generateAgenda() {
+      document.getElementById('aiLoading').classList.remove('hidden');
+      try {
+        const { agenda, count } = await fetch('/api/generate-agenda', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week: currentWeek || null })
+        }).then(r => r.json());
+        document.getElementById('agendaTxt').textContent = agenda;
+        document.getElementById('agendaBanner').classList.remove('hidden');
+        allRecords.forEach(r => r.ai_agenda = agenda);
+        showToast(`✅ AI议程已生成，已同步至多维表 ${count} 条`);
+      } catch (e) {
+        showToast('⚠️ 生成失败，请检查 DeepSeek API Key 配置');
+      }
+      document.getElementById('aiLoading').classList.add('hidden');
+    }
+
+    // ── Toast ─────────────────────────────────────
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.className = 'fixed bottom-6 right-6 bg-slate-800 text-white text-xs font-bold py-3 px-5 rounded-full shadow-2xl z-[300] fade';
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    window.onclick = e => { if (e.target.id === 'modal') closeModal(); };
+  </script>
+</body>
+
+</html>
