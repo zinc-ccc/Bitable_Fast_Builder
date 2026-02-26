@@ -166,14 +166,24 @@ def scan_modules():
     all_fields = bitable.list_fields(APP_TOKEN, TABLE_ID)
     field_by_name = {f["field_name"]: f for f in all_fields}
 
-    summary_names = sorted([f["field_name"] for f in all_fields
-                             if f["field_name"].startswith("摘要_")])
+    # 按照老板要求严格限定顺序
+    ORDER = ["招聘", "Agent", "人员", "业务", "专项", "卡点计划"]
+
+    summary_names = [f["field_name"] for f in all_fields if f["field_name"].startswith("摘要_")]
+    def get_order_idx(name: str) -> int:
+        key = name.replace("摘要_", "")
+        try:
+            return ORDER.index(key)
+        except ValueError:
+            return 999
+    summary_names = sorted(summary_names, key=get_order_idx)
+
     raw_text_names = {f["field_name"] for f in all_fields
                       if f.get("type") == 1 and not f["field_name"].startswith("摘要_")}
     checkbox_names = {f["field_name"] for f in all_fields
                       if f["field_name"].startswith("需汇报_")}
 
-    emoji_map = {"招聘": "📋", "Agent": "🤖", "人员": "👥", "业务": "💼", "专项": "📌", "计划": "📅"}
+    emoji_map = {"招聘": "📋", "Agent": "🤖", "人员": "👥", "业务": "💼", "专项": "📌", "卡点计划": "📅"}
 
     modules = []
     for sf in summary_names:
@@ -351,13 +361,13 @@ def check_boss_password(key_suffix: str) -> bool:
 
 
 # ═══════════════════════════════════════════════
-# VIEW 1: 负责人审阅展示
+# VIEW 1: 负责人审阅
 # ═══════════════════════════════════════════════
 def render_review_view(records, modules):
     if not check_boss_password("review"):
         return
 
-    st.markdown('<div class="view-title">📊 负责人审阅 — 团队内容全景</div>',
+    st.markdown('<div class="view-title">📊 负责人审阅</div>',
                 unsafe_allow_html=True)
 
     # ── AI 议程（全局汇报）
@@ -432,16 +442,17 @@ def render_review_view(records, modules):
                     boss_chk    = get_boss_checked(f, cbf)
                     bp_hot_flag = is_bp_hot(sf, bp_hot)
 
-                    # 样式：老板标记绿色 > BP勾选红色 > 普通
+                    src_tags = []
+                    div_cls = "module-normal"
                     if boss_chk:
+                        src_tags.append("⭐ 负责人标记")
                         div_cls = "module-boss"
-                        flag    = "⭐ 负责人标记 | "
-                    elif bp_hot_flag:
-                        div_cls = "module-hot"
-                        flag    = "🔥 BP重点聚焦 | "
-                    else:
-                        div_cls = "module-normal"
-                        flag    = ""
+                    if bp_hot_flag:
+                        src_tags.append("🔥 BP重点聚焦")
+                        if not boss_chk:
+                            div_cls = "module-hot"
+                            
+                    flag = " | ".join(src_tags) + " | " if src_tags else ""
 
                     summary_text = extract_text(f.get(sf, "")).strip()
                     raw_text = extract_text(f.get(raw_field, "")).strip() if raw_field else ""
@@ -495,8 +506,25 @@ def render_review_view(records, modules):
 # VIEW 2: 周会投屏展示
 # ═══════════════════════════════════════════════
 def render_screen_view(records, modules):
-    st.markdown('<div class="view-title">🎯 周会投屏展示 — 聚焦核心议题</div>',
+    st.markdown('<div class="view-title">🎯 周会投屏展示</div>',
                 unsafe_allow_html=True)
+
+    # ── AI 议程（全局汇报） - 同步投屏展示
+    individual_agendas = []
+    for r in records:
+        f = r["fields"]
+        reporter  = extract_text(f.get(FIELD_REPORTER, "未知"))
+        agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
+        if agenda:
+            individual_agendas.append(f"【{reporter}】\n{agenda}")
+
+    if individual_agendas:
+        global_input = "\n\n".join(individual_agendas)
+        existing_agenda = get_global_agenda(global_input)
+        st.markdown(
+            f'<div class="agenda-panel">🤖 <b>团队周会全局议程洞察 (AI汇总)</b>\n\n{existing_agenda}</div>',
+            unsafe_allow_html=True,
+        )
 
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
     rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
@@ -505,18 +533,13 @@ def render_screen_view(records, modules):
 
     def effective_module_recs(group_records, sf, cbf) -> list:
         """
-        展示集合 = BP勾选 ∪ 老板新增（取并集），且有实际摘要内容。
-        若本组无任何人勾选/标记该模块 → 不显示。
+        展示集合 = 修改为：只要有内容就展示出来。
         """
         result = []
         for r in group_records:
             f = r["fields"]
             content = get_display_content(f, None, sf)
-            if not content:
-                continue
-            bp_hot     = is_bp_hot(sf, get_bp_highlights(f))
-            boss_chk   = get_boss_checked(f, cbf)
-            if bp_hot or boss_chk:
+            if content:
                 result.append(r)
         return result
 
@@ -568,7 +591,6 @@ def render_screen_view(records, modules):
                 fig = go.Figure(go.Pie(
                     labels=bp_names,
                     values=[1] * len(bp_names),
-                    hole=0.55,
                     textinfo="label",
                     hovertemplate="<b>%{label}</b><extra></extra>",
                     marker=dict(
@@ -580,9 +602,6 @@ def render_screen_view(records, modules):
                     showlegend=True,
                     paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
                     font=dict(color="#334155", family="Inter"),
-                    annotations=[dict(text=label.split(" ", 1)[-1],
-                                      x=0.5, y=0.5, font_size=14,
-                                      showarrow=False, font_color="#0f172a")],
                     margin=dict(t=20, b=20, l=20, r=20),
                     height=320,
                     legend=dict(bgcolor="#f8f9fa", bordercolor="#e2e8f0",
@@ -631,7 +650,7 @@ def render_history_view(all_records, modules):
     if not check_boss_password("history"):
         return
 
-    st.markdown('<div class="view-title">📈 周期数据回溯 — 分组别历史明细</div>',
+    st.markdown('<div class="view-title">📈 周期数据回溯</div>',
                 unsafe_allow_html=True)
 
     # TODO: 后续实现周索引自动格式化为「YYYY年第N周」，目前按字段现有值展示
