@@ -35,52 +35,61 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-[data-testid="stAppViewContainer"] { background: #0d1117; }
+[data-testid="stAppViewContainer"] { background: #f8f9fa; }
 [data-testid="stHeader"] { background: transparent; }
 
 .view-title {
-    font-size: 1.5rem; font-weight: 700; color: #e6edf3;
-    border-left: 4px solid #58a6ff; padding-left: 12px; margin-bottom: 16px;
+    font-size: 1.6rem; font-weight: 700; color: #1e293b;
+    border-left: 5px solid #3b82f6; padding-left: 12px; margin-bottom: 20px;
 }
-.bp-name { font-size: 1.05rem; font-weight: 600; color: #e6edf3; margin-bottom: 8px; }
+.bp-name { font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
 .module-hot {
-    background: linear-gradient(90deg, #3d1a1a, #1a1a2e);
-    border-left: 3px solid #f85149; padding: 8px 12px;
-    border-radius: 0 8px 8px 0; margin: 6px 0; color: #e6edf3;
+    background: linear-gradient(135deg, #fff1f2, #ffe4e6);
+    border-left: 4px solid #ef4444; padding: 12px 16px;
+    border-radius: 0 10px 10px 0; margin: 8px 0; color: #1e293b;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 .module-boss {
-    background: linear-gradient(90deg, #1a2e1a, #1a2a1a);
-    border-left: 3px solid #3fb950; padding: 8px 12px;
-    border-radius: 0 8px 8px 0; margin: 6px 0; color: #e6edf3;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border-left: 4px solid #22c55e; padding: 12px 16px;
+    border-radius: 0 10px 10px 0; margin: 8px 0; color: #1e293b;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 .module-normal {
-    background: #21262d; border-left: 3px solid #30363d;
-    padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 6px 0; color: #c9d1d9;
+    background: #ffffff; border-left: 4px solid #cbd5e1;
+    padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 8px 0; color: #334155;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 .ai-box {
-    background: linear-gradient(135deg, #0d2137, #0d3740);
-    border: 1px solid #1f6feb; border-radius: 10px; padding: 14px; color: #79c0ff;
-    margin-top: 8px; font-size: 0.9rem; line-height: 1.6;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; color: #1e3a8a;
+    margin-top: 8px; font-size: 0.95rem; line-height: 1.6;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
 }
 .agenda-panel {
-    background: linear-gradient(135deg, #12121f, #1a1a3a);
-    border: 1px solid #3d52a0; border-radius: 14px; padding: 18px;
-    color: #a0b4e8; margin-bottom: 20px; white-space: pre-wrap;
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #bae6fd; border-radius: 16px; padding: 20px;
+    color: #0369a1; margin-bottom: 24px; white-space: pre-wrap;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08); font-size: 0.95rem; line-height: 1.6;
 }
 .order-panel {
-    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
-    padding: 12px 16px; font-size: 0.85rem; color: #8b949e;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 16px 20px; font-size: 0.9rem; color: #475569;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.03);
 }
-.order-item { padding: 4px 0; border-bottom: 1px solid #21262d; color: #c9d1d9; }
-.tag-bp   { background: #f85149; color: #fff; border-radius: 4px;
-            padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
-.tag-boss { background: #3fb950; color: #fff; border-radius: 4px;
-            padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
-.tag-normal { background: #30363d; color: #8b949e; border-radius: 4px;
-              padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
+.order-item { padding: 8px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-weight: 500;}
+.order-item:last-child { border-bottom: none; }
+
+.tag-bp   { background: #ef4444; color: #fff; border-radius: 6px;
+            padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
+.tag-boss { background: #22c55e; color: #fff; border-radius: 6px;
+            padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
+.tag-normal { background: #e2e8f0; color: #475569; border-radius: 6px;
+              padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
 .pw-box {
-    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;
     padding: 32px; max-width: 400px; margin: 60px auto; text-align: center;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -188,13 +197,30 @@ def extract_text(val) -> str:
     if isinstance(val, bool): return ""
     if isinstance(val, (int, float)): return str(val)
     if isinstance(val, str): return val
+    
+    # Handle display_formula_ref list wrapping
     if isinstance(val, list):
+        if len(val) > 0 and isinstance(val[0], dict) and "type" in val[0] and "value_extra" in val[0]:
+            # e.g. [{"type": "single_option", "value_extra": {"options": [{"name": "营销组"}]}}]
+            opts = val[0]["value_extra"].get("options", [])
+            return "".join(opt.get("name", "") for opt in opts)
+        
         parts = []
         for v in val:
-            if isinstance(v, dict): parts.append(v.get("text", v.get("name", str(v))))
-            else: parts.append(str(v))
+            if isinstance(v, dict):
+                parts.append(v.get("text", v.get("name", str(v))))
+            else:
+                parts.append(str(v))
         return "".join(parts)
-    if isinstance(val, dict): return val.get("text", val.get("name", str(val)))
+        
+    if isinstance(val, dict):
+        if "value_extra" in val and "options" in val["value_extra"]:
+            opts = val["value_extra"].get("options", [])
+            return "".join(opt.get("name", "") for opt in opts)
+        if "value" in val:
+            return extract_text(val["value"])
+        return val.get("text", val.get("name", str(val)))
+        
     return str(val)
 
 
@@ -513,15 +539,15 @@ def render_screen_view(records, modules):
                 ))
                 fig.update_layout(
                     showlegend=True,
-                    paper_bgcolor="#161b22", plot_bgcolor="#161b22",
-                    font=dict(color="#c9d1d9", family="Inter"),
+                    paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                    font=dict(color="#334155", family="Inter"),
                     annotations=[dict(text=label.split(" ", 1)[-1],
                                       x=0.5, y=0.5, font_size=14,
-                                      showarrow=False, font_color="#e6edf3")],
+                                      showarrow=False, font_color="#0f172a")],
                     margin=dict(t=20, b=20, l=20, r=20),
                     height=320,
-                    legend=dict(bgcolor="#21262d", bordercolor="#30363d",
-                                borderwidth=1, font=dict(color="#c9d1d9")),
+                    legend=dict(bgcolor="#f8f9fa", bordercolor="#e2e8f0",
+                                borderwidth=1, font=dict(color="#475569")),
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
