@@ -6,6 +6,8 @@ from core.bitable import BitableClient
 from core.weekly_summarizer import WeeklySummarizer
 from scripts.run_ai_summarize import run_summarize as _run_module_summarize
 
+import threading
+import time
 from collections import deque
 
 # 加载配置
@@ -233,7 +235,20 @@ def handle_im_message(data: lark.CustomizedEvent):
         print(f"事件处理异常: {e}")
 
 
+def ai_cron_job():
+    print("🤖 AI 巡检后台线程启动: 每 5 分钟执行一次静默总结扫描...")
+    while True:
+        try:
+            time.sleep(300)
+            # 只有没有生成过摘要的记录才会调用 AI 大模型（自带防重复）
+            _run_module_summarize(verbose=False)
+        except Exception as e:
+            print(f">>> [Cron] 自动扫描总结发生异常: {e}")
+
 def main():
+    # 启动后台的轮询汇总守护进程
+    threading.Thread(target=ai_cron_job, daemon=True).start()
+    
     print("🚀 HECS 4.1 终端核心启动 (EventDispatcherHandler 模式)...")
 
     # 使用官方 EventDispatcherHandler，注册 p2 自定义事件处理器

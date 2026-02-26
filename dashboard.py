@@ -416,7 +416,7 @@ def render_review_view(records, modules):
                 st.markdown(f'<div class="bp-name">👤 {reporter}</div>', unsafe_allow_html=True)
 
                 if not bp_hot:
-                    st.warning("⚠️ 该 BP 未勾选任何需重点汇报的模块！")
+                    st.caption("ℹ️ 当前暂未勾选重点汇报模块。")
 
                 # 展示个人的 AI 议程
                 indiv_agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
@@ -487,10 +487,10 @@ def render_review_view(records, modules):
                     if cbf and col_cb:
                         with col_cb:
                             new_val = st.checkbox(
-                                "🎯 设为审阅重点",
+                                "🎯 追加为会议重要议程",
                                 value=boss_chk,
                                 key=f"boss_{rid}_{cbf}",
-                                help="若BP未提及，勾选此项将在投屏中直接将此模块上墙；若BP已提及，将叠加负责人重点标记。",
+                                help="该复选框用于将特定模块追加为会议重点讨论议程，投屏时将予以高亮凸显。",
                                 label_visibility="visible",
                             )
                             if new_val != boss_chk:
@@ -559,14 +559,11 @@ def render_screen_view(records, modules):
         # 汇报顺序（右侧面板）
         ordered = sorted(group_records, key=lambda r: r["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
-        has_any_module = False
-        for raw_field, sf, cbf, label in modules:
-            if effective_module_recs(group_records, sf, cbf):
-                has_any_module = True
-                break
+        # Since we show all modules and all BPs, `has_any_module` is always True if group has any records.
+        has_any_module = len(group_records) > 0
 
         if not has_any_module:
-            st.info("本组暂无需重点汇报的模块")
+            st.info("本组暂无人员记录")
             return
 
         main_col, order_col = st.columns([5, 1])
@@ -588,7 +585,7 @@ def render_screen_view(records, modules):
 
         with main_col:
             for raw_field, sf, cbf, label in modules:
-                priority_recs = effective_module_recs(group_records, sf, cbf)
+                priority_recs = ordered
                 if not priority_recs:
                     continue
 
@@ -600,6 +597,7 @@ def render_screen_view(records, modules):
                     labels=bp_names,
                     values=[1] * len(bp_names),
                     textinfo="label",
+                    sort=False,
                     hovertemplate="<b>%{label}</b><extra></extra>",
                     marker=dict(
                         colors=["#58a6ff", "#79c0ff", "#3d8fd9", "#1f6feb", "#2d8fc9", "#a5d8ff"],
@@ -623,11 +621,11 @@ def render_screen_view(records, modules):
                     raw_text = extract_text(rec["fields"].get(raw_field, "")).strip() if raw_field else ""
                     
                     if not summary_text and not raw_text:
-                        continue
-                        
-                    content = summary_text if summary_text else raw_text
-                    
-                    # 标注来源
+                        content = "<span style='color: #94a3b8; font-style: italic;'>该模块暂无汇报内容...</span>"
+                        is_ai = False
+                    else:
+                        content = summary_text if summary_text else raw_text
+                        is_ai = bool(summary_text and raw_text and summary_text != raw_text)
                     src_tags = []
                     if get_boss_checked(rec["fields"], cbf):
                         src_tags.append("⭐ 负责人标记")
@@ -637,8 +635,7 @@ def render_screen_view(records, modules):
                     src = " | ".join(src_tags)
                     src_display = f"  [{src}]" if src else ""
 
-                    is_ai = bool(summary_text and raw_text and summary_text != raw_text)
-                    source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>'
+                    source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else ('<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>' if content and "该模块暂无汇报内容" not in content else '')
 
                     with st.expander(f"👤 {reporter}{src_display}"):
                         st.markdown(f'<div class="ai-box">{content} {source_tag}</div>',
