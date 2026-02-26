@@ -32,7 +32,7 @@ def sync_group_members(chat_id):
         chat_name = bitable_client.get_chat_name(chat_id)
         print(f"[扫描群] {chat_name or chat_id}")
         
-        # 找到 T03
+        # 找到 BP配置中心
         url_tables = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{HECS_APP_TOKEN}/tables"
         headers = {"Authorization": f"Bearer {bitable_client.get_token()}"}
         res_tables = requests.get(url_tables, headers=headers)
@@ -41,10 +41,10 @@ def sync_group_members(chat_id):
             return f"获取表格列表失败: {data.get('msg')}"
             
         tables = data.get("data", {}).get("items", [])
-        t03_id = next((t['table_id'] for t in tables if "T03" in t['name']), "")
+        bp_config_id = next((t['table_id'] for t in tables if "BP配置" in t['name']), "")
         
-        if not t03_id:
-            return "未找到 T03 配置中心表格。"
+        if not bp_config_id:
+            return "未找到 BP配置中心 表格。"
 
         sync_count = 0
         skip_count = 0
@@ -115,7 +115,7 @@ def sync_group_members(chat_id):
                 "群聊ID": chat_id,
                 "组别": group_tag
             }
-            bitable_client.create_record(HECS_APP_TOKEN, t03_id, fields)
+            bitable_client.create_record(HECS_APP_TOKEN, bp_config_id, fields)
             group_summary[group_tag] = group_summary.get(group_tag, 0) + 1
             sync_count += 1
             print(f"  → 写入: {name} → {group_tag} | 群聊ID: {chat_id}")
@@ -130,7 +130,7 @@ def sync_group_members(chat_id):
         reply = f"好的！已扫描群成员，共识别 HRBP {sync_count} 人"
         if detail_str:
             reply += f"（{detail_str}）"
-        reply += "，已同步到 T03 配置表"
+        reply += "，已同步到 BP配置中心 表"
         
         if skip_count > 0:
             reply += f"，其余 {skip_count} 人非目标人员已跳过。"

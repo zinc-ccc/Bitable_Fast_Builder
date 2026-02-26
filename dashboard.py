@@ -133,11 +133,11 @@ _dash = _get_dashboard_config()
 APP_TOKEN = _dash["app_token"]
 TABLE_ID  = _dash["table_id"]
 
-# T03 表 ID（动态查找含 "T03" 的表名）
+# BP配置中心 表 ID（动态查找含 "BP配置" 的表名）
 @st.cache_data(ttl=600)
-def get_t03_table_id():
+def get_bp_config_table_id():
     for t in bitable.list_tables(APP_TOKEN):
-        if "T03" in t.get("name", ""):
+        if "BP配置" in t.get("name", ""):
             return t["table_id"]
     return ""
 
@@ -292,9 +292,9 @@ def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
     res = bitable.update_record(APP_TOKEN, TABLE_ID, record_id, {cb_field: new_val})
     if res.get("code") == 0:
         if new_val:
-            t03_id = get_t03_table_id()
-            if t03_id:
-                uid = bitable.get_bp_user_id(APP_TOKEN, t03_id, reporter)
+            bp_config_id = get_bp_config_table_id()
+            if bp_config_id:
+                uid = bitable.get_bp_user_id(APP_TOKEN, bp_config_id, reporter)
                 if uid:
                     msg = (f"📌 你好 {reporter}！"
                            f"负责人在 {label} 模块额外标注了重点，"
@@ -305,9 +305,9 @@ def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
                     else:
                         st.warning(f"⚠️ 飞书推送失败（{push_res.get('msg')}）")
                 else:
-                    st.warning(f"⚠️ 未在 T03 找到 {reporter} 的飞书ID")
+                    st.warning(f"⚠️ 未在 BP配置中心 找到 {reporter} 的飞书ID")
             else:
-                st.warning("⚠️ 未找到 T03 配置表")
+                st.warning("⚠️ 未找到 BP配置中心 表")
         else:
             st.toast(f"↩️ 已取消额外标记: {reporter}—{label}", icon="🔄")
     else:
