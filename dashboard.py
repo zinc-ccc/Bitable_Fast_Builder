@@ -296,9 +296,9 @@ def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
             if bp_config_id:
                 uid = bitable.get_bp_user_id(APP_TOKEN, bp_config_id, reporter)
                 if uid:
-                    msg = (f"📌 你好 {reporter}！"
-                           f"负责人在 {label} 模块额外标注了重点，"
-                           f"请在周会上重点准备并汇报该模块内容（这是负责人新增，并非重复你已勾选的部分）。")
+                    msg = (f"📌 你好 {reporter}！\n"
+                           f"管理层在 {label} 模块标注了重点指引，"
+                           f"请在周会上重点准备并输出核心结论（此项为管理层重点关注，非重复你在系统内勾选的部分）。")
                     push_res = bitable.send_message(uid, "open_id", msg)
                     if push_res.get("code") == 0:
                         st.toast(f"✅ 已通知 {reporter} 关注「{label}」", icon="📬")
@@ -309,42 +309,42 @@ def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
             else:
                 st.warning("⚠️ 未找到 BP配置中心 表")
         else:
-            st.toast(f"↩️ 已取消额外标记: {reporter}—{label}", icon="🔄")
+            st.toast(f"↩️ 已撤销管理标记: {reporter}—{label}", icon="🔄")
     else:
         st.error(f"写回失败: {res.get('msg')}")
     load_records.clear()
 
 
 # ═══════════════════════════════════════════════
-# 密码保护
+# 权限校验拦截
 # ═══════════════════════════════════════════════
-def check_boss_password() -> bool:
+def check_boss_password(key_suffix: str) -> bool:
     boss_pw = _get_boss_password()
     if not boss_pw:
         return True
     if st.session_state.get("boss_authed"):
         return True
     st.markdown('<div class="pw-box">', unsafe_allow_html=True)
-    st.markdown("🔐 **请输入管理密码**")
-    pw = st.text_input("密码", type="password", key="pw_input", label_visibility="collapsed")
-    if st.button("确认", use_container_width=True):
+    st.markdown("🔐 **系统检测到安全拦截，请输入管理密钥**")
+    pw = st.text_input("密钥", type="password", key=f"pw_input_{key_suffix}", label_visibility="collapsed")
+    if st.button("效验授权", key=f"pw_btn_{key_suffix}", use_container_width=True):
         if pw == boss_pw:
             st.session_state["boss_authed"] = True
             st.rerun()
         else:
-            st.error("密码错误")
+            st.error("密钥验证失败，请重试")
     st.markdown("</div>", unsafe_allow_html=True)
     return False
 
 
 # ═══════════════════════════════════════════════
-# VIEW 1: 老板审阅
+# VIEW 1: 负责人管理视窗
 # ═══════════════════════════════════════════════
 def render_review_view(records, modules):
-    if not check_boss_password():
+    if not check_boss_password("review"):
         return
 
-    st.markdown('<div class="view-title">📋 老板审阅视图 — 本周各 BP 汇报详情</div>',
+    st.markdown('<div class="view-title">📊 负责人管理视窗 — 团队业务全景聚焦</div>',
                 unsafe_allow_html=True)
 
     # ── AI 议程（只读，由脚本写回）
@@ -408,13 +408,20 @@ def render_review_view(records, modules):
                     # 样式：老板标记绿色 > BP勾选红色 > 普通
                     if boss_chk:
                         div_cls = "module-boss"
-                        flag    = "⭐ 负责人额外标记 | "
+                        flag    = "⭐ 管理层指引 | "
                     elif bp_hot_flag:
                         div_cls = "module-hot"
-                        flag    = "🔥 BP重点 | "
+                        flag    = "🔥 BP自选焦点 | "
                     else:
                         div_cls = "module-normal"
                         flag    = ""
+
+                    summary_text = extract_text(f.get(sf, "")).strip()
+                    raw_text = extract_text(f.get(raw_field, "")).strip() if raw_field else ""
+
+                    html_output = f'<b>{label}</b><br>{summary_text if summary_text else raw_text}'
+                    if summary_text and raw_text and summary_text != raw_text:
+                        html_output += f'<details style="margin-top:8px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开业务原文比对</summary><div style="margin-top:6px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; border-left:2px solid #cbd5e1;">{raw_text}</div></details>'
 
                     if cbf:
                         col_c, col_cb = st.columns([6, 1])
@@ -424,17 +431,17 @@ def render_review_view(records, modules):
 
                     with col_c:
                         st.markdown(
-                            f'<div class="{div_cls}">{flag}<b>{label}</b><br>{content}</div>',
+                            f'<div class="{div_cls}">{flag}{html_output}</div>',
                             unsafe_allow_html=True,
                         )
 
                     if cbf and col_cb:
                         with col_cb:
                             new_val = st.checkbox(
-                                "额外标记",
+                                "管理层指引",
                                 value=boss_chk,
                                 key=f"boss_{rid}_{cbf}",
-                                help="⭐ 负责人额外新增汇报模块（不影响BP已勾选的内容，两者会合并展示）",
+                                help="⭐ 赋能该业务模块为周会强聚焦议题（对BP原决策叠加增强，不发生排斥覆盖）",
                                 label_visibility="collapsed",
                             )
                             if new_val != boss_chk:
@@ -453,10 +460,10 @@ def render_review_view(records, modules):
 
 
 # ═══════════════════════════════════════════════
-# VIEW 2: 周会投屏
+# VIEW 2: 周会投屏聚焦
 # ═══════════════════════════════════════════════
 def render_screen_view(records, modules):
-    st.markdown('<div class="view-title">🖥️ 周会投屏视图 — 按模块汇总</div>',
+    st.markdown('<div class="view-title">🎯 周会聚焦投屏 — 提纯式议题透视</div>',
                 unsafe_allow_html=True)
 
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
@@ -553,18 +560,27 @@ def render_screen_view(records, modules):
 
                 for rec in priority_recs:
                     reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
-                    content  = get_display_content(rec["fields"], None, sf)
+                    summary_text = extract_text(rec["fields"].get(sf, "")).strip()
+                    raw_text = extract_text(rec["fields"].get(raw_field, "")).strip() if raw_field else ""
+                    
+                    if not summary_text and not raw_text:
+                        continue
+                        
+                    content = summary_text if summary_text else raw_text
+                    
                     # 标注来源
                     src_tags = []
                     if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
-                        src_tags.append("🔥 BP勾选")
+                        src_tags.append("🔥 BP自选核心")
                     if get_boss_checked(rec["fields"], cbf):
-                        src_tags.append("⭐ 负责人标记")
+                        src_tags.append("⭐ 管理层聚焦")
                     src = " | ".join(src_tags)
 
                     with st.expander(f"👤 {reporter}  {src}"):
                         st.markdown(f'<div class="ai-box">{content}</div>',
                                     unsafe_allow_html=True)
+                        if summary_text and raw_text and summary_text != raw_text:
+                            st.markdown(f'<details style="margin-top:8px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 下钻业务原始细节</summary><div style="margin-top:6px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:#f8f9fa; border:1px solid #e2e8f0; padding:12px; border-radius:6px; border-left:3px solid #cbd5e1;">{raw_text}</div></details>', unsafe_allow_html=True)
                 st.markdown("---")
 
     with tab1:
@@ -574,13 +590,13 @@ def render_screen_view(records, modules):
 
 
 # ═══════════════════════════════════════════════
-# VIEW 3: 历史数据汇总
+# VIEW 3: 周期数据回溯
 # ═══════════════════════════════════════════════
 def render_history_view(all_records, modules):
-    if not check_boss_password():
+    if not check_boss_password("history"):
         return
 
-    st.markdown('<div class="view-title">📚 历史数据汇总 — 按周回溯</div>',
+    st.markdown('<div class="view-title">📈 周期数据回溯 — 跨度趋势沉淀</div>',
                 unsafe_allow_html=True)
 
     # TODO: 后续实现周索引自动格式化为「YYYY年第N周」，目前按字段现有值展示
@@ -637,7 +653,7 @@ def render_history_view(all_records, modules):
 # ═══════════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════════
-st.title("📊 HRBP 周会智能看板")
+st.title("📊 HRBP 周会管理空间站")
 
 modules = scan_modules()
 
@@ -646,23 +662,23 @@ with ctrl_col1:
     all_records_raw = load_records()
     week_opts = get_week_options(all_records_raw)
     selected_week = st.selectbox(
-        "📅 当前周次",
-        ["全部（含历史）"] + week_opts,
+        "📅 业务期次引擎",
+        ["全局周期（含历史回卷）"] + week_opts,
         index=1 if week_opts else 0,
     )
 with ctrl_col2:
-    if st.button("🔄 刷新数据"):
+    if st.button("🔄 同步节点数据"):
         load_records.clear()
         st.rerun()
 with ctrl_col3:
-    if st.button("🔓 退出管理"):
+    if st.button("🔓 释放管理权限"):
         st.session_state.pop("boss_authed", None)
         st.rerun()
 with ctrl_col4:
-    st.caption(f"共 {len(all_records_raw)} 条记录")
+    st.caption(f"全栈数据源 {len(all_records_raw)} 条记录")
 
 # 筛选当周，按提交时间升序
-if selected_week != "全部（含历史）":
+if selected_week != "全局周期（含历史回卷）":
     week_records = [r for r in all_records_raw
                     if extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) == selected_week]
 else:
@@ -672,7 +688,7 @@ week_records.sort(key=lambda x: x["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
 st.divider()
 
-view_tab1, view_tab2, view_tab3 = st.tabs(["📋 老板审阅", "🖥️ 周会投屏", "📚 历史数据"])
+view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人管理视窗", "🎯 周会聚焦投屏", "📈 周期数据回溯"])
 
 with view_tab1:
     render_review_view(week_records, modules)
