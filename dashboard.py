@@ -415,6 +415,9 @@ def render_review_view(records, modules):
             with st.container():
                 st.markdown(f'<div class="bp-name">👤 {reporter}</div>', unsafe_allow_html=True)
 
+                if not bp_hot:
+                    st.warning("⚠️ 该 BP 未勾选任何需重点汇报的模块！")
+
                 # 展示个人的 AI 议程
                 indiv_agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
                 if indiv_agenda:
@@ -470,7 +473,7 @@ def render_review_view(records, modules):
                         html_output += f'<details style="margin-top:8px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开 HRBP 填写原文</summary><div style="margin-top:6px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; border-left:2px solid #cbd5e1;">{raw_text}</div></details>'
 
                     if cbf:
-                        col_c, col_cb = st.columns([6, 1])
+                        col_c, col_cb = st.columns([5, 2])
                     else:
                         col_c = st.container()
                         col_cb = None
@@ -484,11 +487,11 @@ def render_review_view(records, modules):
                     if cbf and col_cb:
                         with col_cb:
                             new_val = st.checkbox(
-                                "负责人标记",
+                                "🎯 设为审阅重点",
                                 value=boss_chk,
                                 key=f"boss_{rid}_{cbf}",
-                                help="⭐ 标记该业务模块为周会重点议题（对BP原决策叠加增强，不发生排斥覆盖）",
-                                label_visibility="collapsed",
+                                help="若BP未提及，勾选此项将在投屏中直接将此模块上墙；若BP已提及，将叠加负责人重点标记。",
+                                label_visibility="visible",
                             )
                             if new_val != boss_chk:
                                 writeback_boss_module(rid, cbf, new_val, reporter, label)
