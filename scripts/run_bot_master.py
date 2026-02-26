@@ -4,6 +4,7 @@ import json
 import requests
 from core.bitable import BitableClient
 from core.weekly_summarizer import WeeklySummarizer
+from scripts.run_ai_summarize import run_summarize as _run_module_summarize
 
 from collections import deque
 
@@ -222,6 +223,10 @@ def handle_im_message(data: lark.CustomizedEvent):
         elif "总结" in text:
             print(">>> 触发 AI 总结指令，正在执行...")
             resp_text = summarize_weekly_reports()
+            bitable_client.send_message(chat_id, "chat_id", resp_text)
+        elif "生成摘要" in text:
+            print(">>> 触发模块摘要指令，正在执行...")
+            resp_text = _run_module_summarize(verbose=True)
             bitable_client.send_message(chat_id, "chat_id", resp_text)
 
     except Exception as e:

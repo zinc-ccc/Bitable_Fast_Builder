@@ -1,0 +1,22 @@
+lark:
+  app_id: "YOUR_LARK_APP_ID"
+  app_secret: "YOUR_LARK_APP_SECRET"
+
+openai:  # DeepSeek 配置
+  api_key: "YOUR_DEEPSEEK_API_KEY"
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+
+settings:
+  default_folder_token: ""
+
+hrbp_dashboard:
+  app_token: "YOUR_BITABLE_APP_TOKEN"
+  table_id: "YOUR_WEEKLY_REPORT_TABLE_ID"
+
+# ─────────────────────────────────────────────────────
+# 使用说明:
+#   本地: 复制此文件为 configs/config.yaml 并填写真实值
+#   云端: 在 Streamlit Cloud → App Settings → Secrets 中
+#         填写对应的 [lark] / [openai] / [hrbp_dashboard] 配置
+# ─────────────────────────────────────────────────────
