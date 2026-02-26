@@ -390,7 +390,7 @@ def render_review_view(records, modules):
             unsafe_allow_html=True,
         )
     else:
-        st.info("📭 本周尚未生成个人AI议程。请通过群组发送「生成摘要」触发。")
+        st.info("📭 当周暂无已归档汇报数据，AI 智能总结将在数据沉淀后自动生成。")
 
     st.markdown("---")
 
@@ -528,6 +528,8 @@ def render_screen_view(records, modules):
             f'<div class="agenda-panel">🤖 <b>团队周会全局议程洞察 (AI汇总)</b>\n\n{existing_agenda}</div>',
             unsafe_allow_html=True,
         )
+    else:
+        st.info("📭 当周暂无已归档汇报数据，AI 智能总结将在数据沉淀后自动生成。")
 
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
     rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
