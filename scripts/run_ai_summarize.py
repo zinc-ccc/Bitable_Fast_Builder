@@ -23,6 +23,7 @@ import sys
 import os
 import re
 import time
+from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -149,6 +150,23 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
 
         # 每 BP 的全部原始内容（供议程使用）
         bp_raw_parts = []
+
+        # 自动计算 周索引 和 汇报标识
+        create_ts = fields.get("创建时间")
+        if create_ts:
+            dt = datetime.fromtimestamp(int(create_ts) / 1000)
+            week_of_month = (dt.day - 1) // 7 + 1
+            
+            calc_week_idx = f"{str(dt.year)[-2:]}M{dt.month}W{week_of_month}"
+            calc_report_tag = f"{dt.year}年{dt.month}月第{week_of_month}周"
+            
+            curr_week_idx = _extract_text(fields.get("周索引", "")).strip()
+            curr_report_tag = _extract_text(fields.get("汇报标识_系统自动", "")).strip()
+            
+            if curr_week_idx != calc_week_idx:
+                new_fields["周索引"] = calc_week_idx
+            if curr_report_tag != calc_report_tag:
+                new_fields["汇报标识_系统自动"] = f"{reporter}-{calc_report_tag}" # 加上汇报人，确保标识清晰
 
         for raw_field, summary_field, module_name in module_map:
             raw_content = _extract_text(fields.get(raw_field, "")).strip()
