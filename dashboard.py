@@ -139,7 +139,7 @@ def get_t03_table_id():
 FIELD_REPORTER   = "汇报人"
 FIELD_GROUP      = "所属小组"
 FIELD_WEEK_IDX   = "周索引"
-FIELD_UPDATE_TS  = "最后更新时间"
+FIELD_CREATE_TS  = "创建时间"
 FIELD_HIGHLIGHTS = "本周需重点汇报模块"
 FIELD_AI_AGENDA  = "AI议程建议"
 
@@ -461,7 +461,7 @@ def render_screen_view(records, modules):
             return
 
         # 汇报顺序（右侧面板）
-        ordered = sorted(group_records, key=lambda r: r["fields"].get(FIELD_UPDATE_TS, 0) or 0)
+        ordered = sorted(group_records, key=lambda r: r["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
         has_any_module = False
         for _, sf, cbf, label in modules:
@@ -479,7 +479,7 @@ def render_screen_view(records, modules):
             items_html = ""
             for i, rec in enumerate(ordered, 1):
                 reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
-                ts       = rec["fields"].get(FIELD_UPDATE_TS, "")
+                ts       = rec["fields"].get(FIELD_CREATE_TS, "")
                 ts_str   = ts_to_str(ts) if ts else "—"
                 items_html += (
                     f'<div class="order-item">#{i} {reporter}<br>'
@@ -642,7 +642,7 @@ if selected_week != "全部（含历史）":
 else:
     week_records = all_records_raw
 
-week_records.sort(key=lambda x: x["fields"].get(FIELD_UPDATE_TS, 0) or 0)
+week_records.sort(key=lambda x: x["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
 st.divider()
 

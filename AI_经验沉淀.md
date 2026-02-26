@@ -177,4 +177,13 @@ client.create_field(app_token, table_id, "组别", 3, property_obj={
 
 ---
 
-*最后更新：2026-02-25 | 维护人：Zinc.Zheng*
+## 四、AI 提示词维护
+
+### 提示词位置
+如果后续业务规则变化，涉及要修改 AI 提取和分析的侧重点，请直接修改 `core/ai_helper.py` 中的提示词：
+1. **模块短摘要提取** (`_MODULE_SUMMARY_PROMPT`，约第 12 行附近)：负责将 BP 填写的长内容，提炼成 15-20 字内的结论短句。
+2. **议程预警与风险分析** (`generate_agenda_from_raw()`，约第 80 行附近)：当群内触发"生成摘要"结束时，基于所有 BP 填入的原文，去生成带预警视角的议程分析建议。
+
+---
+
+*最后更新：2026-02-26 | 维护人：Zinc.Zheng*
