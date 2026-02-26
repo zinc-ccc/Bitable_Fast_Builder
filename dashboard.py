@@ -737,9 +737,10 @@ with ctrl_col2:
         load_records.clear()
         st.rerun()
 with ctrl_col3:
-    if st.button("🔓 退出管理权限"):
-        st.session_state.pop("boss_authed", None)
-        st.rerun()
+    if st.session_state.get("boss_authed"):
+        if st.button("🔓 退出管理权限"):
+            st.session_state.pop("boss_authed", None)
+            st.rerun()
 with ctrl_col4:
     st.caption(f"共扫描 {len(all_records_raw)} 条记录")
 
