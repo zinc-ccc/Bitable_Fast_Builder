@@ -621,16 +621,18 @@ def render_screen_view(records, modules):
                     
                     # 标注来源
                     src_tags = []
-                    if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
-                        src_tags.append("🔥 BP重点聚焦")
                     if get_boss_checked(rec["fields"], cbf):
                         src_tags.append("⭐ 负责人标记")
+                    if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
+                        src_tags.append("🔥 BP重点聚焦")
+                    
                     src = " | ".join(src_tags)
+                    src_display = f"  [{src}]" if src else ""
 
                     is_ai = bool(summary_text and raw_text and summary_text != raw_text)
                     source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>'
 
-                    with st.expander(f"👤 {reporter}  {src}"):
+                    with st.expander(f"👤 {reporter}{src_display}"):
                         st.markdown(f'<div class="ai-box">{content} {source_tag}</div>',
                                     unsafe_allow_html=True)
                         if is_ai:
@@ -644,13 +646,13 @@ def render_screen_view(records, modules):
 
 
 # ═══════════════════════════════════════════════
-# VIEW 3: 月度经营洞察 (原型基础)
+# VIEW 3: 过往数据回溯
 # ═══════════════════════════════════════════════
 def render_history_view(all_records, modules):
     if not check_boss_password("history"):
         return
 
-    st.markdown('<div class="view-title">📈 月度经营洞察</div>',
+    st.markdown('<div class="view-title">📈 过往数据回溯</div>',
                 unsafe_allow_html=True)
 
     week_options = get_week_options(all_records)
@@ -667,7 +669,7 @@ def render_history_view(all_records, modules):
     with col2:
         group_filter = st.selectbox("组别筛选", ["全部", "营销组", "研发组"])
 
-    tab_a, tab_b = st.tabs(["🤖 AI 智能月度简报", "⏳ 业务模块时光轴"])
+    tab_a, tab_b = st.tabs(["🤖 AI 智能过往简报", "⏳ 业务模块时光轴"])
 
     with tab_a:
         st.info("💡 **系统提示**：当前数据累积尚未达到月度标准（暂无全月完整跨度）。\n\n后续完整上线后，大模型将在此处生成强维度的业务提炼摘要。例如：\n- **本月核心业务推进面**\n- **各子模块深度沉淀**\n- **团队人员高光表现**等。")
@@ -747,7 +749,7 @@ week_records.sort(key=lambda x: x["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
 st.divider()
 
-view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人审阅", "🎯 周会投屏展示", "📈 月度经营洞察"])
+view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人审阅", "🎯 周会投屏展示", "📈 过往数据回溯"])
 
 with view_tab1:
     render_review_view(week_records, modules)
