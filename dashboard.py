@@ -26,7 +26,7 @@ from core.ai_helper import AIHelper
 # 页面配置
 # ═══════════════════════════════════════════════
 st.set_page_config(
-    page_title="HRBP 周会智能看板",
+    page_title="FJD HRBP Weekly Board",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
