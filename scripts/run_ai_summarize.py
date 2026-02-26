@@ -70,7 +70,7 @@ def _extract_text(val) -> str:
 
 
 # ── 动态字段映射构建 ────────────────────────────────────
-def build_module_map(all_fields: list) -> list:
+def build_module_map(all_fields: list, verbose: bool = True) -> list:
     """
     从字段列表中动态构建模块映射。
     返回: [(raw_field_name, summary_field_name, display_name), ...]
@@ -93,12 +93,14 @@ def build_module_map(all_fields: list) -> list:
         # 模糊匹配：原始字段名包含 key
         matched = [fname for fname in raw_text_fields if key in fname and not fname.startswith("摘要_")]
         if not matched:
-            print(f"  ⚠️  [字段映射] 未找到对应 '{summary_name}' 的原始内容字段（含 '{key}' 的文本字段不存在）")
+            if verbose:
+                print(f"  ⚠️  [字段映射] 未找到对应 '{summary_name}' 的原始内容字段（含 '{key}' 的文本字段不存在）")
             continue
         # 若多个匹配取最短名（最精确）
         raw_name = min(matched, key=len)
         module_map.append((raw_name, summary_name, key))
-        print(f"  ✅ 字段映射: {raw_name!r:25s} → {summary_name!r}")
+        if verbose:
+            print(f"  ✅ 字段映射: {raw_name!r:25s} → {summary_name!r}")
 
     return module_map
 
@@ -132,7 +134,7 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
     if verbose:
         print("\n🔍 扫描字段结构...")
     all_fields = bitable.list_fields(app_token, table_id)
-    module_map = build_module_map(all_fields)
+    module_map = build_module_map(all_fields, verbose)
     if not module_map:
         return "未能构建任何字段映射，请检查多维表字段命名。"
 
@@ -222,7 +224,7 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
             # 调用 AI 生成摘要（内容已变或摘要为空）
             if verbose:
                 print(f"  🤖 内容已变，重新生成摘要: {reporter} — {module_name}")
-            summary = ai.summarize_module(module_name, raw_content)
+            summary = ai.summarize_module(module_name, raw_content, verbose)
             if summary:
                 new_fields[summary_field] = summary
                 total_ai += 1

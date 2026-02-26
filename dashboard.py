@@ -473,8 +473,8 @@ def render_review_view(records, modules):
                     source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>'
 
                     html_output = f'<b>{label}</b><br>{display_text} {source_tag}'
-                    if is_ai:
-                        html_output += f'<details style="margin-top:8px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开 HRBP 填写原文</summary><div style="margin-top:6px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; border-left:2px solid #cbd5e1;">{raw_text}</div></details>'
+                    if is_ai and raw_text:
+                        html_output += f'<div style="margin-top:10px; font-size:0.85rem; color:#475569;"><b style="color:#64748b;">📝 HRBP 原文</b><div style="margin-top:4px; white-space:pre-wrap; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; border-left:2px solid #cbd5e1;">{raw_text}</div></div>'
 
                     if cbf:
                         col_c, col_cb = st.columns([5, 2])
@@ -607,12 +607,21 @@ def render_screen_view(records, modules):
                 hover_texts = []
                 pulls = []
                 colors = []
+                labels_with_icons = []
 
                 for i, rec in enumerate(priority_recs):
                     bp_name = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
                     summary_text = extract_text(rec["fields"].get(sf, "")).strip()
                     bp_hot = is_bp_hot(sf, get_bp_highlights(rec["fields"]))
                     boss_hot = get_boss_checked(rec["fields"], cbf)
+                    
+                    icon = ""
+                    if boss_hot:
+                        icon = "⭐ "
+                    elif bp_hot:
+                        icon = "🔥 "
+                    
+                    labels_with_icons.append(f"{icon}{bp_name}")
                     
                     # 若被标记为重点，则在饼图中剥离切片呈现视觉强调
                     if boss_hot or bp_hot:
@@ -621,11 +630,11 @@ def render_screen_view(records, modules):
                         pulls.append(0)
                         
                     short_summary = summary_text[:45] + "..." if len(summary_text) > 45 else (summary_text or "暂无内容")
-                    hover_texts.append(f"<b>{bp_name}</b><br>{short_summary}")
+                    hover_texts.append(f"<b>{icon}{bp_name}</b><br>{short_summary}")
                     colors.append(base_colors[i % len(base_colors)])
 
                 fig = go.Figure(go.Pie(
-                    labels=bp_names,
+                    labels=labels_with_icons,
                     values=[1] * len(bp_names),
                     textinfo="label",
                     sort=False,
@@ -657,9 +666,11 @@ def render_screen_view(records, modules):
                     selected_idx = event.selection["points"][0]["point_index"]
 
                 # 为了兜底和防选错，我们依然给一个备用的 pills 选择器
-                selected_bp = st.pills("👇点击上方切片或在此点选以展开详情：", bp_names, default=(bp_names[selected_idx] if selected_idx is not None else None), key=f"pill_{label}_{group_name}")
+                selected_bp_label = st.pills("👇点选上方扇区 或 在此标签过滤以展开详情：", labels_with_icons, default=(labels_with_icons[selected_idx] if selected_idx is not None else None), key=f"pill_{label}_{group_name}")
                 
-                if selected_bp:
+                if selected_bp_label:
+                    # Strip icon dynamically
+                    selected_bp = selected_bp_label.replace("⭐ ", "").replace("🔥 ", "")
                     rec = next((r for r in priority_recs if extract_text(r["fields"].get(FIELD_REPORTER, "")) == selected_bp), None)
                     if rec:
                         reporter = selected_bp
@@ -688,8 +699,11 @@ def render_screen_view(records, modules):
                                     f'<div style="font-weight:600; font-size:1.05rem; color:#0f172a; margin-bottom:12px;">👤 {reporter}{src_display}</div>'
                                     f'<div class="ai-box">{content} {source_tag}</div>',
                                     unsafe_allow_html=True)
-                        if is_ai:
-                            st.markdown(f'<details style="margin-top:12px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开 HRBP 填写原文</summary><div style="margin-top:8px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:#f1f5f9; padding:12px; border-radius:6px; border-left:3px solid #cbd5e1;">{raw_text}</div></details>', unsafe_allow_html=True)
+                        if is_ai and raw_text:
+                            st.markdown(f'<div style="margin-top:12px; font-size:0.85rem; color:#475569;">'
+                                        f'<b style="color:#64748b;">📝 HRBP 原文</b>'
+                                        f'<div style="margin-top:4px; white-space:pre-wrap; background:#f1f5f9; padding:12px; border-radius:6px; border-left:3px solid #cbd5e1;">{raw_text}</div></div>', 
+                                        unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                 
                 st.markdown("---")
@@ -783,7 +797,13 @@ with ctrl_col1:
         index=1 if week_opts else 0,
     )
 with ctrl_col2:
-    if st.button("🔄 同步最新数据"):
+    if st.button("🔄 同步最新数据", help="点击拉取飞书最新数据的同时，会自动触发并更新所有待补充的AI提炼摘要！"):
+        with st.spinner("🤖 正在唤醒 AI 助手秒级清理和审查当周填答..."):
+            from scripts.run_ai_summarize import run_summarize
+            try:
+                run_summarize(APP_TOKEN, TABLE_ID, verbose=False)
+            except Exception as e:
+                st.error(f"AI触发失败: {e}")
         load_records.clear()
         st.rerun()
 with ctrl_col3:

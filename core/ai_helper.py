@@ -125,7 +125,7 @@ class AIHelper:
 
 
     # ── 单模块摘要 ───────────────────────────────────
-    def summarize_module(self, module_name: str, raw_content: str) -> str:
+    def summarize_module(self, module_name: str, raw_content: str, verbose: bool = False) -> str:
         """
         对单个模块的原始内容生成 15-20 字精简摘要。
         - raw_content 为空或极短（<8字）→ 返回 "" 不调用 API
@@ -144,8 +144,10 @@ class AIHelper:
                 temperature=0.3,
             )
             summary = resp.choices[0].message.content.strip()
-            print(f"  [AI摘要] {module_name}: {summary}")
+            if verbose:
+                print(f"  [AI摘要] {module_name}: {summary}")
             return summary
         except Exception as e:
-            print(f"  [AI摘要] {module_name} 调用失败: {e}")
+            if verbose:
+                print(f"  [AI摘要] {module_name} 调用失败: {e}")
             return ""
