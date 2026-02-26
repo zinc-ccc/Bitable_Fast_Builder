@@ -1,13 +1,15 @@
 """
-dashboard.py — HRBP 周会智能看板 (V4.0)
-========================================
+dashboard.py — HRBP 周会智能看板 (V4.1)
+=========================================
 三视图：老板审阅 | 周会投屏 | 历史数据汇总
 
-新特性：
-  - 双模式凭证（Streamlit Secrets / 本地 config.yaml）
-  - 老板审阅：按模块勾选，同步多维表 + 飞书私信推送给 BP
-  - 周会投屏：优先级判断（老板勾选 > BP勾选），右下角汇报顺序面板
-  - 密码保护：老板审阅 & 历史数据需密码，周会投屏公开
+V4.1 修订：
+  - 字段名来自实际扫描，动态识别，不硬编码
+  - 模块为空 → 不渲染，节省视图空间
+  - 老板复选框 = 新增汇报模块（合并到 BP 已选，非覆盖）
+  - 投屏：显示集合 = BP勾选 ∪ 老板新增
+  - AI议程 → 只读展示（由脚本写回，无需看板内点击）
+  - 密码保护老板审阅 & 历史数据
 """
 
 import streamlit as st
@@ -33,7 +35,6 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
 [data-testid="stAppViewContainer"] { background: #0d1117; }
 [data-testid="stHeader"] { background: transparent; }
 
@@ -41,14 +42,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     font-size: 1.5rem; font-weight: 700; color: #e6edf3;
     border-left: 4px solid #58a6ff; padding-left: 12px; margin-bottom: 16px;
 }
-.bp-card {
-    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
-    padding: 16px 20px; margin-bottom: 12px;
-}
 .bp-name { font-size: 1.05rem; font-weight: 600; color: #e6edf3; margin-bottom: 8px; }
 .module-hot {
     background: linear-gradient(90deg, #3d1a1a, #1a1a2e);
     border-left: 3px solid #f85149; padding: 8px 12px;
+    border-radius: 0 8px 8px 0; margin: 6px 0; color: #e6edf3;
+}
+.module-boss {
+    background: linear-gradient(90deg, #1a2e1a, #1a2a1a);
+    border-left: 3px solid #3fb950; padding: 8px 12px;
     border-radius: 0 8px 8px 0; margin: 6px 0; color: #e6edf3;
 }
 .module-normal {
@@ -63,21 +65,19 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .agenda-panel {
     background: linear-gradient(135deg, #12121f, #1a1a3a);
     border: 1px solid #3d52a0; border-radius: 14px; padding: 18px;
-    color: #a0b4e8; margin-bottom: 20px;
+    color: #a0b4e8; margin-bottom: 20px; white-space: pre-wrap;
 }
 .order-panel {
     background: #161b22; border: 1px solid #30363d; border-radius: 10px;
     padding: 12px 16px; font-size: 0.85rem; color: #8b949e;
 }
 .order-item { padding: 4px 0; border-bottom: 1px solid #21262d; color: #c9d1d9; }
-.tag-hot { background: #f85149; color: #fff; border-radius: 4px;
-           padding: 2px 8px; font-size: 0.78rem; margin-right: 6px; }
+.tag-bp   { background: #f85149; color: #fff; border-radius: 4px;
+            padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
+.tag-boss { background: #3fb950; color: #fff; border-radius: 4px;
+            padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
 .tag-normal { background: #30363d; color: #8b949e; border-radius: 4px;
-              padding: 2px 8px; font-size: 0.78rem; margin-right: 6px; }
-.group-header {
-    font-size: 1.2rem; font-weight: 700; color: #58a6ff;
-    border-bottom: 2px solid #21262d; padding-bottom: 8px; margin-bottom: 16px;
-}
+              padding: 2px 8px; font-size: 0.78rem; margin-right: 4px; }
 .pw-box {
     background: #161b22; border: 1px solid #30363d; border-radius: 12px;
     padding: 32px; max-width: 400px; margin: 60px auto; text-align: center;
@@ -87,10 +87,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 
 # ═══════════════════════════════════════════════
-# 配置读取（双模式）
+# 配置读取（双模式：Streamlit Secrets / 本地 YAML）
 # ═══════════════════════════════════════════════
 def _get_dashboard_config():
-    """优先 Streamlit secrets，回退本地 config.yaml。"""
     try:
         if "hrbp_dashboard" in st.secrets:
             return {
@@ -100,7 +99,7 @@ def _get_dashboard_config():
     except Exception:
         pass
     cfg_path = os.path.join(os.path.dirname(__file__), "configs", "config.yaml")
-    with open(cfg_path, 'r', encoding='utf-8') as f:
+    with open(cfg_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return cfg["hrbp_dashboard"]
 
@@ -112,18 +111,8 @@ def _get_boss_password():
         return ""
 
 
-# ── T03 表 ID（动态查找含"T03"的表名）
-@st.cache_data(ttl=600)
-def get_t03_table_id(app_token):
-    tables = bitable.list_tables(app_token)
-    for t in tables:
-        if "T03" in t.get("name", ""):
-            return t["table_id"]
-    return ""
-
-
 # ═══════════════════════════════════════════════
-# 初始化客户端
+# 初始化
 # ═══════════════════════════════════════════════
 @st.cache_resource
 def get_clients():
@@ -131,13 +120,21 @@ def get_clients():
 
 
 bitable, ai = get_clients()
-dash_cfg = _get_dashboard_config()
-APP_TOKEN = dash_cfg["app_token"]
-TABLE_ID  = dash_cfg["table_id"]
+_dash = _get_dashboard_config()
+APP_TOKEN = _dash["app_token"]
+TABLE_ID  = _dash["table_id"]
+
+# T03 表 ID（动态查找含 "T03" 的表名）
+@st.cache_data(ttl=600)
+def get_t03_table_id():
+    for t in bitable.list_tables(APP_TOKEN):
+        if "T03" in t.get("name", ""):
+            return t["table_id"]
+    return ""
 
 
 # ═══════════════════════════════════════════════
-# 字段常量
+# 固定字段
 # ═══════════════════════════════════════════════
 FIELD_REPORTER   = "汇报人"
 FIELD_GROUP      = "所属小组"
@@ -145,17 +142,42 @@ FIELD_WEEK_IDX   = "周索引"
 FIELD_UPDATE_TS  = "最后更新时间"
 FIELD_HIGHLIGHTS = "本周需重点汇报模块"
 FIELD_AI_AGENDA  = "AI议程建议"
-FIELD_ARCHIVE    = "归档标识"
 
-# (AI摘要字段, 老板勾选字段, 显示标签)
-MODULES = [
-    ("摘要_招聘",  "需汇报_招聘",  "📋 招聘进展"),
-    ("摘要_Agent", "需汇报_Agent", "🤖 Agent实践"),
-    ("摘要_人员",  "需汇报_人员",  "👥 人员情况"),
-    ("摘要_业务",  "需汇报_业务",  "💼 业务情况"),
-    ("摘要_专项",  None,           "📌 专项工作"),
-    ("摘要_计划",  "需汇报_计划",  "📅 下周计划"),
-]
+
+# ═══════════════════════════════════════════════
+# 动态字段扫描 & 模块映射
+# ═══════════════════════════════════════════════
+@st.cache_data(ttl=300)
+def scan_modules():
+    """
+    返回模块列表：[(raw_field, summary_field, checkbox_field_or_None, label), ...]
+    完全动态，不硬编码字段名。
+    """
+    all_fields = bitable.list_fields(APP_TOKEN, TABLE_ID)
+    field_by_name = {f["field_name"]: f for f in all_fields}
+
+    summary_names = sorted([f["field_name"] for f in all_fields
+                             if f["field_name"].startswith("摘要_")])
+    raw_text_names = {f["field_name"] for f in all_fields
+                      if f.get("type") == 1 and not f["field_name"].startswith("摘要_")}
+    checkbox_names = {f["field_name"] for f in all_fields
+                      if f["field_name"].startswith("需汇报_")}
+
+    emoji_map = {"招聘": "📋", "Agent": "🤖", "人员": "👥", "业务": "💼", "专项": "📌", "计划": "📅"}
+
+    modules = []
+    for sf in summary_names:
+        key = sf.replace("摘要_", "")
+        # 模糊匹配原始字段
+        matched = [n for n in raw_text_names if key in n]
+        raw_field = min(matched, key=len) if matched else None
+        # 匹配复选框
+        cb_field = f"需汇报_{key}" if f"需汇报_{key}" in checkbox_names else None
+        emoji = emoji_map.get(key, "📎")
+        label = f"{emoji} {key}"
+        modules.append((raw_field, sf, cb_field, label))
+
+    return modules
 
 
 # ═══════════════════════════════════════════════
@@ -163,7 +185,7 @@ MODULES = [
 # ═══════════════════════════════════════════════
 def extract_text(val) -> str:
     if val is None: return ""
-    if isinstance(val, bool): return str(val)
+    if isinstance(val, bool): return ""
     if isinstance(val, (int, float)): return str(val)
     if isinstance(val, str): return val
     if isinstance(val, list):
@@ -176,32 +198,46 @@ def extract_text(val) -> str:
     return str(val)
 
 
-def get_highlights(fields: dict) -> list:
+def get_bp_highlights(fields: dict) -> set:
+    """BP 自己勾选的重点模块关键词集合。"""
     raw = fields.get(FIELD_HIGHLIGHTS, [])
-    if isinstance(raw, list): return [extract_text(h) for h in raw]
-    return [extract_text(raw)] if raw else []
+    items = raw if isinstance(raw, list) else [raw]
+    return {extract_text(h) for h in items if extract_text(h)}
 
 
-def is_module_hot_by_bp(summary_field: str, highlights: list) -> bool:
+def get_boss_checked(fields: dict, cb_field: str) -> bool:
+    """老板是否已勾选该模块。"""
+    if not cb_field:
+        return False
+    return bool(fields.get(cb_field, False))
+
+
+def is_bp_hot(summary_field: str, bp_highlights: set) -> bool:
     key = summary_field.replace("摘要_", "")
-    return any(key in h for h in highlights)
-
-
-def boss_has_any_selection(fields: dict) -> bool:
-    """老板是否对该条记录做过任何模块勾选。"""
-    for _, cbf, _ in MODULES:
-        if cbf and fields.get(cbf, False):
-            return True
-    return False
+    return any(key in h for h in bp_highlights)
 
 
 def ts_to_str(ts) -> str:
-    """毫秒时间戳 → 可读字符串。"""
     try:
-        dt = datetime.fromtimestamp(int(ts) / 1000)
-        return dt.strftime("%m/%d %H:%M")
+        return datetime.fromtimestamp(int(ts) / 1000).strftime("%m/%d %H:%M")
     except Exception:
         return str(ts)
+
+
+def get_display_content(fields: dict, raw_field, summary_field: str) -> str:
+    """
+    展示优先级：
+      1. 摘要字段有内容 → 展示摘要
+      2. 摘要为空，原始内容有内容 → 展示原始内容（短内容直写时摘要即原文）
+      3. 都为空 → 返回 ""（不渲染该模块）
+    """
+    summary = extract_text(fields.get(summary_field, "")).strip()
+    if summary:
+        return summary
+    if raw_field:
+        raw = extract_text(fields.get(raw_field, "")).strip()
+        return raw
+    return ""
 
 
 # ═══════════════════════════════════════════════
@@ -224,66 +260,49 @@ def get_week_options(records):
 # ═══════════════════════════════════════════════
 # 写回操作
 # ═══════════════════════════════════════════════
-def writeback_boss_module(record_id: str, cbf: str, new_val: bool,
+def writeback_boss_module(record_id: str, cb_field: str, new_val: bool,
                           reporter: str, label: str):
-    """
-    写回单个「需汇报_xxx」字段，并向该 BP 发送飞书私信通知。
-    """
-    res = bitable.update_record(APP_TOKEN, TABLE_ID, record_id, {cbf: new_val})
+    """写回「需汇报_xxx」并向 BP 发飞书私信。"""
+    res = bitable.update_record(APP_TOKEN, TABLE_ID, record_id, {cb_field: new_val})
     if res.get("code") == 0:
         if new_val:
-            # 查询 BP 的 open_id 并发私信
-            t03_id = get_t03_table_id(APP_TOKEN)
+            t03_id = get_t03_table_id()
             if t03_id:
                 uid = bitable.get_bp_user_id(APP_TOKEN, t03_id, reporter)
                 if uid:
-                    msg = (f"📌 你好 {reporter}！负责人已将你的【{label}】模块标记为本周重点汇报，"
-                           f"请在周会上重点准备并汇报该部分内容。")
+                    msg = (f"📌 你好 {reporter}！"
+                           f"负责人在 {label} 模块额外标注了重点，"
+                           f"请在周会上重点准备并汇报该模块内容（这是负责人新增，并非重复你已勾选的部分）。")
                     push_res = bitable.send_message(uid, "open_id", msg)
                     if push_res.get("code") == 0:
-                        st.toast(f"✅ 已通知 {reporter} 准备「{label}」", icon="📬")
+                        st.toast(f"✅ 已通知 {reporter} 关注「{label}」", icon="📬")
                     else:
-                        st.warning(f"⚠️ 飞书推送失败（{push_res.get('msg')}），请检查机器人权限")
+                        st.warning(f"⚠️ 飞书推送失败（{push_res.get('msg')}）")
                 else:
-                    st.warning(f"⚠️ 未在 T03 找到 {reporter} 的飞书ID，无法推送")
+                    st.warning(f"⚠️ 未在 T03 找到 {reporter} 的飞书ID")
             else:
-                st.warning("⚠️ 未找到 T03 配置表，无法推送通知")
+                st.warning("⚠️ 未找到 T03 配置表")
         else:
-            st.toast(f"↩️ 已取消勾选: {reporter}—{label}", icon="🔄")
+            st.toast(f"↩️ 已取消额外标记: {reporter}—{label}", icon="🔄")
     else:
         st.error(f"写回失败: {res.get('msg')}")
     load_records.clear()
 
 
-def writeback_ai_agenda(record_ids: list, agenda_text: str) -> int:
-    ok = 0
-    for rid in record_ids:
-        res = bitable.update_record(APP_TOKEN, TABLE_ID, rid, {FIELD_AI_AGENDA: agenda_text})
-        if res.get("code") == 0:
-            ok += 1
-    return ok
-
-
 # ═══════════════════════════════════════════════
-# 密码保护装饰器
+# 密码保护
 # ═══════════════════════════════════════════════
 def check_boss_password() -> bool:
-    """
-    返回 True = 已通过验证。
-    若未设置密码则直接放行。
-    """
     boss_pw = _get_boss_password()
     if not boss_pw:
-        return True  # 未配置密码时不拦截
-
+        return True
     if st.session_state.get("boss_authed"):
         return True
-
     st.markdown('<div class="pw-box">', unsafe_allow_html=True)
     st.markdown("🔐 **请输入管理密码**")
-    pw_input = st.text_input("密码", type="password", key="pw_input", label_visibility="collapsed")
+    pw = st.text_input("密码", type="password", key="pw_input", label_visibility="collapsed")
     if st.button("确认", use_container_width=True):
-        if pw_input == boss_pw:
+        if pw == boss_pw:
             st.session_state["boss_authed"] = True
             st.rerun()
         else:
@@ -295,42 +314,26 @@ def check_boss_password() -> bool:
 # ═══════════════════════════════════════════════
 # VIEW 1: 老板审阅
 # ═══════════════════════════════════════════════
-def render_review_view(records):
+def render_review_view(records, modules):
     if not check_boss_password():
         return
 
     st.markdown('<div class="view-title">📋 老板审阅视图 — 本周各 BP 汇报详情</div>',
                 unsafe_allow_html=True)
 
-    # ── AI 议程建议区块
-    col_a1, col_a2 = st.columns([4, 1])
-    with col_a1:
-        existing_agenda = extract_text(records[0]["fields"].get(FIELD_AI_AGENDA, "")) if records else ""
-        if existing_agenda:
-            st.markdown(
-                f'<div class="agenda-panel">🤖 <b>本周 AI 汇报议程建议</b><br><br>{existing_agenda}</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("📭 本周尚未生成 AI 议程建议，请点击右侧按钮生成。")
-    with col_a2:
-        if st.button("✨ 生成 AI 议程", use_container_width=True):
-            full_text = "\n\n".join([
-                f"【{extract_text(r['fields'].get(FIELD_REPORTER, '未知'))}】:\n" +
-                "\n".join([f"  {label}: {extract_text(r['fields'].get(sf, ''))}"
-                           for sf, _, label in MODULES if r["fields"].get(sf)])
-                for r in records
-            ])
-            with st.spinner("DeepSeek 生成中..."):
-                agenda = ai.generate_agenda(full_text)
-            count = writeback_ai_agenda([r["record_id"] for r in records], agenda)
-            st.success(f"✅ 已同步至多维表 ({count} 条)")
-            load_records.clear()
-            st.rerun()
+    # ── AI 议程（只读，由脚本写回）
+    existing_agenda = extract_text(records[0]["fields"].get(FIELD_AI_AGENDA, "")).strip() if records else ""
+    if existing_agenda:
+        st.markdown(
+            f'<div class="agenda-panel">🤖 <b>本周 AI 汇报议程分析</b>\n\n{existing_agenda}</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("📭 本周尚未生成 AI 议程分析。在机器人群组发送「生成摘要」可自动生成并写回多维表。")
 
     st.markdown("---")
 
-    # ── 分组渲染
+    # ── 分组
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
     rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
     other     = [r for r in records if r not in marketing and r not in rd]
@@ -341,66 +344,74 @@ def render_review_view(records):
         if not group_records:
             st.info("本组暂无汇报记录")
             return
+
         for rec in group_records:
-            f = rec["fields"]
-            rid = rec["record_id"]
-            reporter = extract_text(f.get(FIELD_REPORTER, "未知"))
-            highlights = get_highlights(f)
-            boss_has_sel = boss_has_any_selection(f)
+            f         = rec["fields"]
+            rid       = rec["record_id"]
+            reporter  = extract_text(f.get(FIELD_REPORTER, "未知"))
+            bp_hot    = get_bp_highlights(f)
 
             with st.container():
                 st.markdown(f'<div class="bp-name">👤 {reporter}</div>', unsafe_allow_html=True)
 
-                # 模块标签（显示哪些有内容）
+                # 模块标签行
                 tags_html = ""
-                for sf, cbf, label in MODULES:
-                    content = extract_text(f.get(sf, ""))
+                for raw_field, sf, cbf, label in modules:
+                    content = get_display_content(f, raw_field, sf)
                     if not content:
-                        continue
-                    # 显示：老板已勾选 > BP勾选 > 无标记
-                    if cbf and bool(f.get(cbf, False)):
-                        cls = "tag-hot"
-                    elif not boss_has_sel and is_module_hot_by_bp(sf, highlights):
-                        cls = "tag-hot"
+                        continue  # 无内容 → 不渲染
+                    boss_chk = get_boss_checked(f, cbf)
+                    bp_hot_flag = is_bp_hot(sf, bp_hot)
+                    if boss_chk:
+                        tags_html += f'<span class="tag-boss">⭐ {label}</span>'
+                    elif bp_hot_flag:
+                        tags_html += f'<span class="tag-bp">🔥 {label}</span>'
                     else:
-                        cls = "tag-normal"
-                    tags_html += f'<span class="{cls}">{label}</span>'
+                        tags_html += f'<span class="tag-normal">{label}</span>'
                 st.markdown(tags_html, unsafe_allow_html=True)
 
-                # 各模块内容 + 老板勾选框
-                for sf, cbf, label in MODULES:
-                    content = extract_text(f.get(sf, ""))
+                # 各模块详情 + 老板额外标记复选框
+                for raw_field, sf, cbf, label in modules:
+                    content = get_display_content(f, raw_field, sf)
                     if not content:
-                        continue
+                        continue  # 空内容 → 不渲染此模块
 
-                    # 优先级：老板勾选 > BP勾选
-                    if cbf:
-                        boss_checked = bool(f.get(cbf, False))
-                        col_content, col_cb = st.columns([5, 1])
+                    boss_chk    = get_boss_checked(f, cbf)
+                    bp_hot_flag = is_bp_hot(sf, bp_hot)
+
+                    # 样式：老板标记绿色 > BP勾选红色 > 普通
+                    if boss_chk:
+                        div_cls = "module-boss"
+                        flag    = "⭐ 负责人额外标记 | "
+                    elif bp_hot_flag:
+                        div_cls = "module-hot"
+                        flag    = "🔥 BP重点 | "
                     else:
-                        boss_checked = False
-                        col_content, col_cb = st.columns([6, 0.01])
+                        div_cls = "module-normal"
+                        flag    = ""
 
-                    hot = boss_checked or (not boss_has_sel and is_module_hot_by_bp(sf, highlights))
-                    div_cls = "module-hot" if hot else "module-normal"
-                    flag = "🔥 " if hot else ""
+                    if cbf:
+                        col_c, col_cb = st.columns([6, 1])
+                    else:
+                        col_c = st.container()
+                        col_cb = None
 
-                    with col_content:
+                    with col_c:
                         st.markdown(
                             f'<div class="{div_cls}">{flag}<b>{label}</b><br>{content}</div>',
                             unsafe_allow_html=True,
                         )
 
-                    if cbf:
+                    if cbf and col_cb:
                         with col_cb:
                             new_val = st.checkbox(
-                                "老板标记",
-                                value=boss_checked,
+                                "额外标记",
+                                value=boss_chk,
                                 key=f"boss_{rid}_{cbf}",
-                                help="勾选后将同步至多维表并向 BP 发送飞书提醒",
+                                help="⭐ 负责人额外新增汇报模块（不影响BP已勾选的内容，两者会合并展示）",
                                 label_visibility="collapsed",
                             )
-                            if new_val != boss_checked:
+                            if new_val != boss_chk:
                                 writeback_boss_module(rid, cbf, new_val, reporter, label)
                                 st.rerun()
 
@@ -418,7 +429,7 @@ def render_review_view(records):
 # ═══════════════════════════════════════════════
 # VIEW 2: 周会投屏
 # ═══════════════════════════════════════════════
-def render_screen_view(records):
+def render_screen_view(records, modules):
     st.markdown('<div class="view-title">🖥️ 周会投屏视图 — 按模块汇总</div>',
                 unsafe_allow_html=True)
 
@@ -427,78 +438,71 @@ def render_screen_view(records):
 
     tab1, tab2 = st.tabs(["🏪 营销组", "💻 研发组"])
 
-    def effective_modules(group_records: list) -> list:
+    def effective_module_recs(group_records, sf, cbf) -> list:
         """
-        决定哪些模块在投屏中展示。
-        优先级规则：
-          - 若任意 BP 记录中老板勾选了某模块 → 该模块展示
-          - 若本组所有记录老板均未勾选 → 以 BP 自己勾选的「本周需重点汇报模块」为准
+        展示集合 = BP勾选 ∪ 老板新增（取并集），且有实际摘要内容。
+        若本组无任何人勾选/标记该模块 → 不显示。
         """
-        boss_any = any(boss_has_any_selection(r["fields"]) for r in group_records)
-        active_modules = []
-        for sf, cbf, label in MODULES:
-            if cbf:
-                if boss_any:
-                    if any(bool(r["fields"].get(cbf, False)) for r in group_records):
-                        active_modules.append((sf, cbf, label))
-                else:
-                    highlights_all = []
-                    for r in group_records:
-                        highlights_all.extend(get_highlights(r["fields"]))
-                    key = sf.replace("摘要_", "")
-                    if any(key in h for h in highlights_all):
-                        active_modules.append((sf, cbf, label))
-            else:
-                # 专项：有内容就显示
-                if any(extract_text(r["fields"].get(sf, "")) for r in group_records):
-                    active_modules.append((sf, cbf, label))
-        return active_modules
+        result = []
+        for r in group_records:
+            f = r["fields"]
+            content = get_display_content(f, None, sf)
+            if not content:
+                continue
+            bp_hot     = is_bp_hot(sf, get_bp_highlights(f))
+            boss_chk   = get_boss_checked(f, cbf)
+            if bp_hot or boss_chk:
+                result.append(r)
+        return result
 
-    def render_module_donuts(group_records: list):
+    def render_module_donuts(group_records):
         if not group_records:
             st.info("本组暂无汇报记录")
             return
 
-        active = effective_modules(group_records)
-        if not active:
+        # 汇报顺序（右侧面板）
+        ordered = sorted(group_records, key=lambda r: r["fields"].get(FIELD_UPDATE_TS, 0) or 0)
+
+        has_any_module = False
+        for _, sf, cbf, label in modules:
+            if effective_module_recs(group_records, sf, cbf):
+                has_any_module = True
+                break
+
+        if not has_any_module:
             st.info("本组暂无需重点汇报的模块")
             return
 
-        # 右侧汇报顺序面板
-        ordered = sorted(
-            group_records,
-            key=lambda r: r["fields"].get(FIELD_UPDATE_TS, 0) or 0,
-        )
-
         main_col, order_col = st.columns([5, 1])
+
         with order_col:
-            st.markdown('<div class="order-panel"><b>📋 汇报顺序</b>', unsafe_allow_html=True)
+            items_html = ""
             for i, rec in enumerate(ordered, 1):
                 reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
-                ts = rec["fields"].get(FIELD_UPDATE_TS, "")
-                ts_str = ts_to_str(ts) if ts else "—"
-                st.markdown(
+                ts       = rec["fields"].get(FIELD_UPDATE_TS, "")
+                ts_str   = ts_to_str(ts) if ts else "—"
+                items_html += (
                     f'<div class="order-item">#{i} {reporter}<br>'
-                    f'<span style="font-size:0.75rem;color:#6e7681">{ts_str}</span></div>',
-                    unsafe_allow_html=True,
+                    f'<span style="font-size:0.75rem;color:#6e7681">{ts_str}</span></div>'
                 )
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="order-panel"><b>📋 汇报顺序</b>{items_html}</div>',
+                unsafe_allow_html=True,
+            )
 
         with main_col:
-            for sf, cbf, label in active:
-                priority_recs = [r for r in group_records
-                                 if extract_text(r["fields"].get(sf, ""))]
+            for _, sf, cbf, label in modules:
+                priority_recs = effective_module_recs(group_records, sf, cbf)
                 if not priority_recs:
                     continue
 
                 st.markdown(f"### {label}")
 
-                bp_names = [extract_text(r["fields"].get(FIELD_REPORTER, "未知")) for r in priority_recs]
-                values   = [1] * len(priority_recs)
-
+                bp_names = [extract_text(r["fields"].get(FIELD_REPORTER, "未知"))
+                            for r in priority_recs]
                 fig = go.Figure(go.Pie(
                     labels=bp_names,
-                    values=values,
+                    values=[1] * len(bp_names),
                     hole=0.55,
                     textinfo="label",
                     hovertemplate="<b>%{label}</b><extra></extra>",
@@ -509,13 +513,11 @@ def render_screen_view(records):
                 ))
                 fig.update_layout(
                     showlegend=True,
-                    paper_bgcolor="#161b22",
-                    plot_bgcolor="#161b22",
+                    paper_bgcolor="#161b22", plot_bgcolor="#161b22",
                     font=dict(color="#c9d1d9", family="Inter"),
-                    annotations=[dict(
-                        text=label.split(" ", 1)[-1],
-                        x=0.5, y=0.5, font_size=14, showarrow=False, font_color="#e6edf3"
-                    )],
+                    annotations=[dict(text=label.split(" ", 1)[-1],
+                                      x=0.5, y=0.5, font_size=14,
+                                      showarrow=False, font_color="#e6edf3")],
                     margin=dict(t=20, b=20, l=20, r=20),
                     height=320,
                     legend=dict(bgcolor="#21262d", bordercolor="#30363d",
@@ -525,10 +527,18 @@ def render_screen_view(records):
 
                 for rec in priority_recs:
                     reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
-                    content  = extract_text(rec["fields"].get(sf, ""))
-                    with st.expander(f"👤 {reporter} 的 {label}"):
-                        st.markdown(f'<div class="ai-box">{content}</div>', unsafe_allow_html=True)
+                    content  = get_display_content(rec["fields"], None, sf)
+                    # 标注来源
+                    src_tags = []
+                    if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
+                        src_tags.append("🔥 BP勾选")
+                    if get_boss_checked(rec["fields"], cbf):
+                        src_tags.append("⭐ 负责人标记")
+                    src = " | ".join(src_tags)
 
+                    with st.expander(f"👤 {reporter}  {src}"):
+                        st.markdown(f'<div class="ai-box">{content}</div>',
+                                    unsafe_allow_html=True)
                 st.markdown("---")
 
     with tab1:
@@ -540,13 +550,14 @@ def render_screen_view(records):
 # ═══════════════════════════════════════════════
 # VIEW 3: 历史数据汇总
 # ═══════════════════════════════════════════════
-def render_history_view(all_records):
+def render_history_view(all_records, modules):
     if not check_boss_password():
         return
 
-    st.markdown('<div class="view-title">📚 历史数据汇总 — 按周/月回溯</div>',
+    st.markdown('<div class="view-title">📚 历史数据汇总 — 按周回溯</div>',
                 unsafe_allow_html=True)
 
+    # TODO: 后续实现周索引自动格式化为「YYYY年第N周」，目前按字段现有值展示
     week_options = get_week_options(all_records)
     if not week_options:
         st.info("多维表暂无填写「周索引」的历史记录")
@@ -555,8 +566,7 @@ def render_history_view(all_records):
     col1, col2 = st.columns([2, 1])
     with col1:
         selected_weeks = st.multiselect(
-            "选择周次（可多选对比）",
-            week_options,
+            "选择周次（可多选对比）", week_options,
             default=week_options[:2] if len(week_options) >= 2 else week_options,
         )
     with col2:
@@ -572,17 +582,17 @@ def render_history_view(all_records):
         st.warning("当前筛选条件下无数据")
         return
 
-    for sf, _, label in MODULES:
-        has_data = any(extract_text(r["fields"].get(sf, "")) for r in filtered)
+    for raw_field, sf, _, label in modules:
+        has_data = any(get_display_content(r["fields"], raw_field, sf) for r in filtered)
         if not has_data:
             continue
 
         with st.expander(f"{label}", expanded=False):
             week_groups = defaultdict(list)
             for r in filtered:
-                week = extract_text(r["fields"].get(FIELD_WEEK_IDX, "未知周次"))
-                content  = extract_text(r["fields"].get(sf, ""))
-                reporter = extract_text(r["fields"].get(FIELD_REPORTER, ""))
+                week    = extract_text(r["fields"].get(FIELD_WEEK_IDX, "未知周次"))
+                content = get_display_content(r["fields"], raw_field, sf)
+                reporter= extract_text(r["fields"].get(FIELD_REPORTER, ""))
                 if content:
                     week_groups[week].append((reporter, content))
 
@@ -599,9 +609,11 @@ def render_history_view(all_records):
 
 
 # ═══════════════════════════════════════════════
-# 主入口 & 全局控制栏
+# 主入口
 # ═══════════════════════════════════════════════
 st.title("📊 HRBP 周会智能看板")
+
+modules = scan_modules()
 
 ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([3, 1, 1, 1])
 with ctrl_col1:
@@ -623,12 +635,10 @@ with ctrl_col3:
 with ctrl_col4:
     st.caption(f"共 {len(all_records_raw)} 条记录")
 
-# 筛选当周记录并按提交时间排序
+# 筛选当周，按提交时间升序
 if selected_week != "全部（含历史）":
-    week_records = [
-        r for r in all_records_raw
-        if extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) == selected_week
-    ]
+    week_records = [r for r in all_records_raw
+                    if extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) == selected_week]
 else:
     week_records = all_records_raw
 
@@ -636,14 +646,13 @@ week_records.sort(key=lambda x: x["fields"].get(FIELD_UPDATE_TS, 0) or 0)
 
 st.divider()
 
-# 三视图 Tab
 view_tab1, view_tab2, view_tab3 = st.tabs(["📋 老板审阅", "🖥️ 周会投屏", "📚 历史数据"])
 
 with view_tab1:
-    render_review_view(week_records)
+    render_review_view(week_records, modules)
 
 with view_tab2:
-    render_screen_view(week_records)
+    render_screen_view(week_records, modules)
 
 with view_tab3:
-    render_history_view(all_records_raw)
+    render_history_view(all_records_raw, modules)

@@ -59,7 +59,7 @@ class AIHelper:
         self.model = cfg["model"]
         self.client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
 
-    # ── 议程生成 ─────────────────────────────────────
+    # ── 议程生成（基于摘要文本）────────────────────────
     def generate_agenda(self, reports_text: str) -> str:
         if not reports_text.strip():
             return "暂无汇报内容"
@@ -76,6 +76,38 @@ class AIHelper:
             return resp.choices[0].message.content.strip()
         except Exception as e:
             return f"AI 议程生成失败: {e}"
+
+    # ── 议程生成（基于原始内容，含风险分析）───────────
+    def generate_agenda_from_raw(self, raw_reports_text: str) -> str:
+        """
+        基于 BP 填写的原始内容（非摘要）生成综合议程建议。
+        包含：风险识别、未勾选重点但值得关注的模块、跨 BP 共性问题。
+        """
+        if not raw_reports_text.strip():
+            return "暂无原始汇报内容"
+        system_prompt = (
+            "你是资深 HRBP 管理顾问，正在为负责人准备周会议程。\n"
+            "请阅读以下各 BP 提交的周报原始内容（含BP勾选的重点模块），完成以下分析：\n"
+            "1. 【风险预警】识别潜在的人员流失风险、业务异常、招聘卡点等\n"
+            "2. 【遗漏关注】找出哪些BP未勾选为重点汇报，但内容显示需要关注的模块\n"
+            "3. 【共性议题】提炼多个BP共同提到的问题或趋势\n"
+            "4. 【议程建议】给出3-5条本周会议重点讨论项\n"
+            "输出格式：每部分分段，语言简洁专业，总字数200字以内。"
+        )
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": raw_reports_text},
+                ],
+                max_tokens=400,
+                temperature=0.4,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            return f"AI 议程分析失败: {e}"
+
 
     # ── 单模块摘要 ───────────────────────────────────
     def summarize_module(self, module_name: str, raw_content: str) -> str:

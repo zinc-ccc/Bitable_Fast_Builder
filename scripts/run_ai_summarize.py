@@ -1,52 +1,112 @@
 """
-run_ai_summarize.py
-===================
-扫描 HRBP 周报表，对各模块原始内容自动生成 AI 摘要（15-20字），
-写回对应的 摘要_xxx 字段。
+run_ai_summarize.py  (V4.1)
+============================
+动态扫描 HRBP 周报表字段，对各模块生成 AI 摘要并写回。
+触发后同时生成 AI议程建议（基于原始内容，不依赖摘要）。
 
-字段映射（原始内容 → AI摘要）：
-  M1 招聘产出与HC确认  → 摘要_招聘
-  M2 Agent实践与业务进展 → 摘要_Agent
-  M3 人员情况跟进     → 摘要_人员
-  M4 业务部门情况     → 摘要_业务
-  M5 卡点与下周计划   → 摘要_计划
+原则：
+  - BP 填写的原始内容字段：绝对只读，不得修改
+  - 系统只写入：摘要_xxx、AI议程建议、汇报标识_系统自动
+  - 每条记录：摘要已存在 → 跳过（不重复调用）
+  - 原始内容为空 → 跳过（不写任何内容）
+  - 原始内容 < 10字 → 直接写入原始内容，不调用 AI
+  - 原始内容 ≥ 10字 → 调用 DeepSeek 生成 15-20 字摘要
 
-运行方式：
+命名合规检查：字段名含全角符号/括号/连字符会打印警告。
+
+运行：
   python -m scripts.run_ai_summarize
-  或由 run_bot_master.py 通过"生成摘要"指令触发。
+  或由 run_bot_master.py "生成摘要" 指令触发
 """
 
 import sys
 import os
+import re
+import time
 
-# 支持从项目根目录运行
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import yaml
 from core.bitable import BitableClient
 from core.ai_helper import AIHelper
 
-# ── 字段映射 ──────────────────────────────────────────────────────────
-# (原始内容字段名, AI摘要写入字段名, 模块显示名)
-MODULE_MAP = [
-    ("M1 招聘产出与HC确认",    "摘要_招聘",  "招聘"),
-    ("M2 Agent实践与业务进展", "摘要_Agent", "Agent"),
-    ("M3 人员情况跟进",        "摘要_人员",  "人员"),
-    ("M4 业务部门情况",        "摘要_业务",  "业务"),
-    ("M5 卡点与下周计划",      "摘要_计划",  "计划"),
-]
+# ── 字段名合规检查 ──────────────────────────────────────
+_BAD_CHARS = re.compile(r'[（）【】《》\u201c\u201d\u2018\u2019\u2014、。，！？：；·()\[\]]')
+
+def _check_field_name(name: str):
+    if _BAD_CHARS.search(name):
+        print(f"  ⚠️  [字段命名警告] '{name}' 含不规范符号，可能导致 API 识别问题，建议改为纯中文或「半角:_」格式")
 
 
 def _get_config():
     config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "config.yaml")
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = True) -> str:
+def _extract_text(val) -> str:
+    """统一从飞书字段值中提取纯文本。"""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return ""
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, str):
+        return val
+    if isinstance(val, list):
+        parts = []
+        for v in val:
+            if isinstance(v, dict):
+                parts.append(v.get("text", v.get("name", str(v))))
+            else:
+                parts.append(str(v))
+        return "".join(parts)
+    if isinstance(val, dict):
+        return val.get("text", val.get("name", str(val)))
+    return str(val)
+
+
+# ── 动态字段映射构建 ────────────────────────────────────
+def build_module_map(all_fields: list) -> list:
     """
-    主入口。可直接调用或由机器人触发。
-    返回结果摘要文本。
+    从字段列表中动态构建模块映射。
+    返回: [(raw_field_name, summary_field_name, display_name), ...]
+
+    逻辑：
+      - 找到所有 摘要_xxx 字段
+      - 对每个 摘要_xxx，在原始字段中寻找名称包含 xxx 的文本字段（type=1）
+      - 如果找不到，打印警告
+    """
+    summary_fields = {f["field_name"]: f for f in all_fields if f["field_name"].startswith("摘要_")}
+    raw_text_fields = {f["field_name"]: f for f in all_fields if f.get("type") == 1 and not f["field_name"].startswith("摘要_")}
+
+    # 检查所有字段命名合规性
+    for f in all_fields:
+        _check_field_name(f["field_name"])
+
+    module_map = []
+    for summary_name in sorted(summary_fields.keys()):
+        key = summary_name.replace("摘要_", "")  # e.g. "招聘", "Agent", "人员"
+        # 模糊匹配：原始字段名包含 key
+        matched = [fname for fname in raw_text_fields if key in fname and not fname.startswith("摘要_")]
+        if not matched:
+            print(f"  ⚠️  [字段映射] 未找到对应 '{summary_name}' 的原始内容字段（含 '{key}' 的文本字段不存在）")
+            continue
+        # 若多个匹配取最短名（最精确）
+        raw_name = min(matched, key=len)
+        module_map.append((raw_name, summary_name, key))
+        print(f"  ✅ 字段映射: {raw_name!r:25s} → {summary_name!r}")
+
+    return module_map
+
+
+# ── 主函数 ──────────────────────────────────────────────
+def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = True,
+                  force: bool = False) -> str:
+    """
+    扫描、摘要、生成议程。
+    force=True 时强制重新生成所有已有摘要。
     """
     cfg = _get_config()
     if not app_token:
@@ -57,71 +117,125 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
     bitable = BitableClient()
     ai = AIHelper()
 
+    # 1. 扫描字段，动态构建映射
     if verbose:
-        print(f"🔍 读取多维表记录... app_token={app_token[:8]}...")
+        print("\n🔍 扫描字段结构...")
+    all_fields = bitable.list_fields(app_token, table_id)
+    module_map = build_module_map(all_fields)
+    if not module_map:
+        return "未能构建任何字段映射，请检查多维表字段命名。"
+
+    # 2. 读取记录
+    if verbose:
+        print(f"\n📋 读取周报记录...")
     records = bitable.list_records(app_token, table_id)
     if not records:
         return "周报表暂无记录。"
 
-    total_updated = 0
+    if verbose:
+        print(f"  共 {len(records)} 条记录，开始处理...\n")
+
+    updates_needed = []           # [{record_id, fields}]
+    agenda_source_parts = []      # 用于生成议程的原始内容聚合
     total_skipped = 0
-    updates_needed = []
+    total_short  = 0
+    total_ai     = 0
 
     for rec in records:
-        fields = rec.get("fields", {})
-        record_id = rec.get("record_id", "")
-        reporter = fields.get("汇报人", record_id)
-        if isinstance(reporter, list):
-            reporter = "".join(
-                v.get("text", "") if isinstance(v, dict) else str(v) for v in reporter
-            )
-
+        fields     = rec.get("fields", {})
+        record_id  = rec.get("record_id", "")
+        reporter   = _extract_text(fields.get("汇报人", record_id))
         new_fields = {}
-        for raw_field, summary_field, module_name in MODULE_MAP:
-            # 跳过：摘要已有内容
-            existing_summary = fields.get(summary_field, "")
-            if isinstance(existing_summary, list):
-                existing_summary = "".join(
-                    v.get("text", "") if isinstance(v, dict) else str(v)
-                    for v in existing_summary
-                )
-            if str(existing_summary).strip():
+
+        # 每 BP 的全部原始内容（供议程使用）
+        bp_raw_parts = []
+
+        for raw_field, summary_field, module_name in module_map:
+            raw_content = _extract_text(fields.get(raw_field, "")).strip()
+
+            # 聚合原始内容给议程
+            if raw_content:
+                bp_raw_parts.append(f"【{module_name}】{raw_content}")
+
+            # 判断是否已有摘要
+            existing_summary = _extract_text(fields.get(summary_field, "")).strip()
+            if existing_summary and not force:
+                total_skipped += 1
                 if verbose:
                     print(f"  ✓ 已有摘要，跳过: {reporter} — {module_name}")
-                total_skipped += 1
                 continue
 
-            # 读取原始内容
-            raw_content = fields.get(raw_field, "")
-            if isinstance(raw_content, list):
-                raw_content = "".join(
-                    v.get("text", "") if isinstance(v, dict) else str(v)
-                    for v in raw_content
-                )
-            raw_content = str(raw_content).strip()
-
-            if not raw_content or len(raw_content) < 8:
+            # 原始内容为空 → 不写任何东西
+            if not raw_content:
                 if verbose:
                     print(f"  — 原始内容为空，跳过: {reporter} — {module_name}")
-                total_skipped += 1
+                continue
+
+            # 原始内容 < 10字 → 直接写入原始内容，不调用 AI
+            if len(raw_content) < 10:
+                new_fields[summary_field] = raw_content
+                total_short += 1
+                if verbose:
+                    print(f"  📝 内容极短，直接写入: {reporter} — {module_name}: {raw_content!r}")
                 continue
 
             # 调用 AI 生成摘要
             summary = ai.summarize_module(module_name, raw_content)
             if summary:
                 new_fields[summary_field] = summary
+                total_ai += 1
 
         if new_fields:
             updates_needed.append({"record_id": record_id, "fields": new_fields})
 
-    if not updates_needed:
-        return f"所有模块摘要均已存在或无内容可总结（跳过 {total_skipped} 条）。"
+        # 聚合议程内容
+        if bp_raw_parts:
+            highlights_raw = _extract_text(fields.get("本周需重点汇报模块", ""))
+            agenda_source_parts.append(
+                f"【{reporter}（BP勾选重点：{highlights_raw or '未勾选'}）】\n" +
+                "\n".join(bp_raw_parts)
+            )
 
-    if verbose:
-        print(f"\n📝 准备写回 {len(updates_needed)} 条记录...")
-    total_updated = bitable.batch_update_records(app_token, table_id, updates_needed)
+    # 3. 写回摘要
+    ok_count = 0
+    if updates_needed:
+        if verbose:
+            print(f"\n📝 写回 {len(updates_needed)} 条记录的摘要字段...")
+        ok_count = bitable.batch_update_records(app_token, table_id, updates_needed)
 
-    result = f"AI 摘要生成完成：成功写回 {total_updated} 条记录，跳过 {total_skipped} 个字段。"
+    # 4. 自动生成 AI 议程建议（基于原始内容，分析风险）
+    agenda_result = ""
+    if agenda_source_parts:
+        if verbose:
+            print("\n🤖 生成 AI 议程建议...")
+        full_raw_text = "\n\n".join(agenda_source_parts)
+        agenda_text = ai.generate_agenda_from_raw(full_raw_text)
+
+        if agenda_text:
+            # 写入所有记录的 AI议程建议 字段
+            agenda_updates = [
+                {"record_id": rec["record_id"], "fields": {"AI议程建议": agenda_text}}
+                for rec in records
+            ]
+            agenda_ok = bitable.batch_update_records(app_token, table_id, agenda_updates)
+            agenda_result = f"，议程建议已同步 {agenda_ok} 条"
+            if verbose:
+                print(f"  ✅ AI议程建议写回完成（{agenda_ok} 条）")
+
+    # 5. 汇总结果
+    result_parts = []
+    if ok_count:
+        result_parts.append(f"摘要写回 {ok_count} 条记录")
+    if total_ai:
+        result_parts.append(f"AI生成 {total_ai} 个模块")
+    if total_short:
+        result_parts.append(f"短内容直写 {total_short} 个")
+    if total_skipped:
+        result_parts.append(f"跳过已有摘要 {total_skipped} 个")
+    if agenda_result:
+        result_parts.append(f"AI议程已更新")
+
+    result = "、".join(result_parts) + "。" if result_parts else "所有摘要均已处理或无需更新。"
     if verbose:
         print(f"\n✅ {result}")
     return result
