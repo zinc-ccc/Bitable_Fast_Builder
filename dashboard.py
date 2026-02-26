@@ -543,7 +543,7 @@ def render_screen_view(records, modules):
                 result.append(r)
         return result
 
-    def render_module_donuts(group_records):
+    def render_module_donuts(group_records, group_name=""):
         if not group_records:
             st.info("本组暂无汇报记录")
             return
@@ -607,7 +607,7 @@ def render_screen_view(records, modules):
                     legend=dict(bgcolor="#f8f9fa", bordercolor="#e2e8f0",
                                 borderwidth=1, font=dict(color="#475569")),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key=f"pie_{label}_{group_name}")
 
                 for rec in priority_recs:
                     reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
@@ -638,70 +638,75 @@ def render_screen_view(records, modules):
                 st.markdown("---")
 
     with tab1:
-        render_module_donuts(marketing)
+        render_module_donuts(marketing, "marketing")
     with tab2:
-        render_module_donuts(rd)
+        render_module_donuts(rd, "rd")
 
 
 # ═══════════════════════════════════════════════
-# VIEW 3: 周期数据回溯
+# VIEW 3: 月度经营洞察 (原型基础)
 # ═══════════════════════════════════════════════
 def render_history_view(all_records, modules):
     if not check_boss_password("history"):
         return
 
-    st.markdown('<div class="view-title">📈 周期数据回溯</div>',
+    st.markdown('<div class="view-title">📈 月度经营洞察</div>',
                 unsafe_allow_html=True)
 
-    # TODO: 后续实现周索引自动格式化为「YYYY年第N周」，目前按字段现有值展示
     week_options = get_week_options(all_records)
     if not week_options:
-        st.info("多维表暂无填写「周索引」的历史记录")
+        st.info("多维表暂无历史记录")
         return
 
     col1, col2 = st.columns([2, 1])
     with col1:
         selected_weeks = st.multiselect(
-            "选择周次（可多选对比）", week_options,
+            "选择月度覆盖周期（目前按周索引模拟）", week_options,
             default=week_options[:2] if len(week_options) >= 2 else week_options,
         )
     with col2:
         group_filter = st.selectbox("组别筛选", ["全部", "营销组", "研发组"])
 
-    filtered = [r for r in all_records
-                if extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) in selected_weeks]
-    if group_filter != "全部":
-        filtered = [r for r in filtered
-                    if group_filter[:2] in extract_text(r["fields"].get(FIELD_GROUP, ""))]
+    tab_a, tab_b = st.tabs(["🤖 AI 智能月度简报", "⏳ 业务模块时光轴"])
 
-    if not filtered:
-        st.warning("当前筛选条件下无数据")
-        return
+    with tab_a:
+        st.info("💡 **系统提示**：当前数据累积尚未达到月度标准（暂无全月完整跨度）。\n\n后续完整上线后，大模型将在此处生成强维度的业务提炼摘要。例如：\n- **本月核心业务推进面**\n- **各子模块深度沉淀**\n- **团队人员高光表现**等。")
 
-    for raw_field, sf, _, label in modules:
-        has_data = any(get_display_content(r["fields"], raw_field, sf) for r in filtered)
-        if not has_data:
-            continue
+    with tab_b:
+        filtered = [r for r in all_records
+                    if extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) in selected_weeks]
+        if group_filter != "全部":
+            filtered = [r for r in filtered
+                        if group_filter[:2] in extract_text(r["fields"].get(FIELD_GROUP, ""))]
 
-        with st.expander(f"{label}", expanded=False):
-            week_groups = defaultdict(list)
-            for r in filtered:
-                week    = extract_text(r["fields"].get(FIELD_WEEK_IDX, "未知周次"))
-                content = get_display_content(r["fields"], raw_field, sf)
-                reporter= extract_text(r["fields"].get(FIELD_REPORTER, ""))
-                if content:
-                    week_groups[week].append((reporter, content))
+        if not filtered:
+            st.warning("当前筛选条件下无数据")
+            return
 
-            cols = st.columns(min(len(selected_weeks), 3))
-            for i, week in enumerate(sorted(week_groups, reverse=True)):
-                with cols[i % len(cols)]:
-                    st.markdown(f"**📅 {week}**")
-                    for reporter, content in week_groups[week]:
-                        st.markdown(
-                            f'<div class="module-normal"><b>{reporter}</b><br>'
-                            f'<small>{content}</small></div>',
-                            unsafe_allow_html=True,
-                        )
+        for raw_field, sf, _, label in modules:
+            has_data = any(get_display_content(r["fields"], raw_field, sf) for r in filtered)
+            if not has_data:
+                continue
+
+            with st.expander(f"{label}", expanded=False):
+                week_groups = defaultdict(list)
+                for r in filtered:
+                    week    = extract_text(r["fields"].get(FIELD_WEEK_IDX, "未知周次"))
+                    content = get_display_content(r["fields"], raw_field, sf)
+                    reporter= extract_text(r["fields"].get(FIELD_REPORTER, ""))
+                    if content:
+                        week_groups[week].append((reporter, content))
+
+                cols = st.columns(max(min(len(selected_weeks), 3), 1))
+                for i, week in enumerate(sorted(week_groups, reverse=True)):
+                    with cols[i % len(cols)]:
+                        st.markdown(f"**📅 {week}**")
+                        for reporter, content in week_groups[week]:
+                            st.markdown(
+                                f'<div class="module-normal"><b>{reporter}</b><br>'
+                                f'<small>{content}</small></div>',
+                                unsafe_allow_html=True,
+                            )
 
 
 # ═══════════════════════════════════════════════
@@ -742,7 +747,7 @@ week_records.sort(key=lambda x: x["fields"].get(FIELD_CREATE_TS, 0) or 0)
 
 st.divider()
 
-view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人审阅", "🎯 周会投屏展示", "📈 周期数据回溯"])
+view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人审阅", "🎯 周会投屏展示", "📈 月度经营洞察"])
 
 with view_tab1:
     render_review_view(week_records, modules)
