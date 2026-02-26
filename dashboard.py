@@ -18,7 +18,7 @@ import yaml
 import os
 import plotly.graph_objects as go
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from core.bitable import BitableClient
 from core.ai_helper import AIHelper
 
@@ -256,7 +256,8 @@ def is_bp_hot(summary_field: str, bp_highlights: set) -> bool:
 
 def ts_to_str(ts) -> str:
     try:
-        return datetime.fromtimestamp(int(ts) / 1000).strftime("%m/%d %H:%M")
+        tz = timezone(timedelta(hours=8))
+        return datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).astimezone(tz).strftime("%m/%d %H:%M")
     except Exception:
         return str(ts)
 
@@ -374,25 +375,7 @@ def render_review_view(records, modules):
                 unsafe_allow_html=True)
 
     # ── AI 议程（全局汇报）
-    individual_agendas = []
-    for r in records:
-        f = r["fields"]
-        reporter  = extract_text(f.get(FIELD_REPORTER, "未知"))
-        agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
-        if agenda:
-            individual_agendas.append(f"【{reporter}】\n{agenda}")
-
-    if individual_agendas:
-        global_input = "\n\n".join(individual_agendas)
-        existing_agenda = get_global_agenda(global_input)
-        st.markdown(
-            f'<div class="agenda-panel">🤖 <b>团队周会全局议程洞察 (AI汇总)</b>\n\n{existing_agenda}</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("📭 当周暂无已归档汇报数据，AI 智能总结将在数据沉淀后自动生成。")
-
-    st.markdown("---")
+    # 注：现在挪到底下的 render_group_cards 内部实现了总分结构。
 
     # ── 分组
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
@@ -401,10 +384,31 @@ def render_review_view(records, modules):
 
     tab1, tab2 = st.tabs(["🏪 营销组", "💻 研发组"])
 
-    def render_group_cards(group_records):
+    def render_group_cards(group_records, group_label=""):
         if not group_records:
             st.info("本组暂无汇报记录")
             return
+
+        # ---- 生成并渲染本组的 AI 全局汇总（总分形式） ----
+        individual_agendas = []
+        for r in group_records:
+            f = r["fields"]
+            reporter = extract_text(f.get(FIELD_REPORTER, "未知"))
+            agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
+            if agenda:
+                individual_agendas.append(f"【{reporter}】\n{agenda}")
+        
+        if individual_agendas:
+            global_input = "\n\n".join(individual_agendas)
+            group_summary = get_global_agenda(f"【{group_label}组数据】\n{global_input}")
+            st.markdown(
+                f'<div class="agenda-panel">🤖 <b>{group_label}组 - 全局议程洞察</b>\n\n{group_summary}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info(f"📭 当周{group_label}暂无已归档汇总数据，AI 将在数据收集后自动生成。")
+        st.markdown("<br>", unsafe_allow_html=True)
+        # --------------------------------------------------
 
         for rec in group_records:
             f         = rec["fields"]
@@ -500,12 +504,12 @@ def render_review_view(records, modules):
                 st.markdown("---")
 
     with tab1:
-        render_group_cards(marketing)
+        render_group_cards(marketing, "营销")
     with tab2:
-        render_group_cards(rd)
+        render_group_cards(rd, "研发")
     if other:
         st.markdown("### 其他")
-        render_group_cards(other)
+        render_group_cards(other, "其他")
 
 
 # ═══════════════════════════════════════════════
@@ -515,24 +519,7 @@ def render_screen_view(records, modules):
     st.markdown('<div class="view-title">🎯 周会投屏展示</div>',
                 unsafe_allow_html=True)
 
-    # ── AI 议程（全局汇报） - 同步投屏展示
-    individual_agendas = []
-    for r in records:
-        f = r["fields"]
-        reporter  = extract_text(f.get(FIELD_REPORTER, "未知"))
-        agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
-        if agenda:
-            individual_agendas.append(f"【{reporter}】\n{agenda}")
-
-    if individual_agendas:
-        global_input = "\n\n".join(individual_agendas)
-        existing_agenda = get_global_agenda(global_input)
-        st.markdown(
-            f'<div class="agenda-panel">🤖 <b>团队周会全局议程洞察 (AI汇总)</b>\n\n{existing_agenda}</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("📭 当周暂无已归档汇报数据，AI 智能总结将在数据沉淀后自动生成。")
+    # ── AI 议程（全局汇报） - 等待后续具体按组别渲染
 
     marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
     rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
@@ -551,10 +538,31 @@ def render_screen_view(records, modules):
                 result.append(r)
         return result
 
-    def render_module_donuts(group_records, group_name=""):
+    def render_module_donuts(group_records, group_label="", group_name=""):
         if not group_records:
             st.info("本组暂无汇报记录")
             return
+
+        # ---- 生成并渲染本组的 AI 全局汇总（总分形式） ----
+        individual_agendas = []
+        for r in group_records:
+            f = r["fields"]
+            reporter = extract_text(f.get(FIELD_REPORTER, "未知"))
+            agenda = extract_text(f.get(FIELD_AI_AGENDA, "")).strip()
+            if agenda:
+                individual_agendas.append(f"【{reporter}】\n{agenda}")
+        
+        if individual_agendas:
+            global_input = "\n\n".join(individual_agendas)
+            group_summary = get_global_agenda(f"【{group_label}组数据】\n{global_input}")
+            st.markdown(
+                f'<div class="agenda-panel">🤖 <b>{group_label}组 - 全局议程洞察</b>\n\n{group_summary}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info(f"📭 当周{group_label}组暂无已归档数据，AI 智能总结将在数据沉淀后自动生成。")
+        st.markdown("<br>", unsafe_allow_html=True)
+        # --------------------------------------------------
 
         # 汇报顺序（右侧面板）
         ordered = sorted(group_records, key=lambda r: r["fields"].get(FIELD_CREATE_TS, 0) or 0)
@@ -593,61 +601,103 @@ def render_screen_view(records, modules):
 
                 bp_names = [extract_text(r["fields"].get(FIELD_REPORTER, "未知"))
                             for r in priority_recs]
+                
+                # ── 定制切片的高级颜色与突出状态 ──
+                base_colors = ["#134e4a", "#0f766e", "#3b82f6", "#f59e0b", "#10b981", "#6366f1", "#0284c7"]
+                hover_texts = []
+                pulls = []
+                colors = []
+
+                for i, rec in enumerate(priority_recs):
+                    bp_name = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
+                    summary_text = extract_text(rec["fields"].get(sf, "")).strip()
+                    bp_hot = is_bp_hot(sf, get_bp_highlights(rec["fields"]))
+                    boss_hot = get_boss_checked(rec["fields"], cbf)
+                    
+                    # 若被标记为重点，则在饼图中剥离切片呈现视觉强调
+                    if boss_hot or bp_hot:
+                        pulls.append(0.12)
+                    else:
+                        pulls.append(0)
+                        
+                    short_summary = summary_text[:45] + "..." if len(summary_text) > 45 else (summary_text or "暂无内容")
+                    hover_texts.append(f"<b>{bp_name}</b><br>{short_summary}")
+                    colors.append(base_colors[i % len(base_colors)])
+
                 fig = go.Figure(go.Pie(
                     labels=bp_names,
                     values=[1] * len(bp_names),
                     textinfo="label",
                     sort=False,
-                    hovertemplate="<b>%{label}</b><extra></extra>",
+                    pull=pulls,
+                    hovertext=hover_texts,
+                    hovertemplate="%{hovertext}<extra></extra>",
                     marker=dict(
-                        colors=["#58a6ff", "#79c0ff", "#3d8fd9", "#1f6feb", "#2d8fc9", "#a5d8ff"],
-                        line=dict(color="#0d1117", width=2),
+                        colors=colors,
+                        line=dict(color="#ffffff", width=2),
                     ),
                 ))
                 fig.update_layout(
-                    showlegend=True,
+                    showlegend=False,  # 不再需要冗杂图例，直接在切片上显示人名
                     paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-                    font=dict(color="#334155", family="Inter"),
+                    font=dict(color="#334155", family="Inter", size=14),
                     margin=dict(t=20, b=20, l=20, r=20),
-                    height=320,
-                    legend=dict(bgcolor="#f8f9fa", bordercolor="#e2e8f0",
-                                borderwidth=1, font=dict(color="#475569")),
+                    height=280
                 )
-                st.plotly_chart(fig, use_container_width=True, key=f"pie_{label}_{group_name}")
+                
+                try:
+                    event = st.plotly_chart(fig, use_container_width=True, key=f"pie_{label}_{group_name}", on_select="rerun", selection_mode="points")
+                except TypeError:
+                    # 兼容可能不支持 on_select 的旧版 streamlit，虽说这里测出来是 1.54.0
+                    event = None
+                    st.plotly_chart(fig, use_container_width=True, key=f"pie_{label}_{group_name}")
 
-                for rec in priority_recs:
-                    reporter = extract_text(rec["fields"].get(FIELD_REPORTER, "未知"))
-                    summary_text = extract_text(rec["fields"].get(sf, "")).strip()
-                    raw_text = extract_text(rec["fields"].get(raw_field, "")).strip() if raw_field else ""
-                    
-                    if not summary_text and not raw_text:
-                        content = "<span style='color: #94a3b8; font-style: italic;'>该模块暂无汇报内容...</span>"
-                        is_ai = False
-                    else:
-                        content = summary_text if summary_text else raw_text
-                        is_ai = bool(summary_text and raw_text and summary_text != raw_text)
-                    src_tags = []
-                    if get_boss_checked(rec["fields"], cbf):
-                        src_tags.append("⭐ 负责人标记")
-                    if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
-                        src_tags.append("🔥 BP重点聚焦")
-                    
-                    src = " | ".join(src_tags)
-                    src_display = f"  [{src}]" if src else ""
+                selected_idx = None
+                if event and event.selection and event.selection.get("points"):
+                    selected_idx = event.selection["points"][0]["point_index"]
 
-                    source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else ('<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>' if content and "该模块暂无汇报内容" not in content else '')
+                # 为了兜底和防选错，我们依然给一个备用的 pills 选择器
+                selected_bp = st.pills("👇点击上方切片或在此点选以展开详情：", bp_names, default=(bp_names[selected_idx] if selected_idx is not None else None), key=f"pill_{label}_{group_name}")
+                
+                if selected_bp:
+                    rec = next((r for r in priority_recs if extract_text(r["fields"].get(FIELD_REPORTER, "")) == selected_bp), None)
+                    if rec:
+                        reporter = selected_bp
+                        summary_text = extract_text(rec["fields"].get(sf, "")).strip()
+                        raw_text = extract_text(rec["fields"].get(raw_field, "")).strip() if raw_field else ""
+                        
+                        if not summary_text and not raw_text:
+                            content = "<span style='color: #94a3b8; font-style: italic;'>该模块暂无汇报内容...</span>"
+                            is_ai = False
+                        else:
+                            content = summary_text if summary_text else raw_text
+                            is_ai = bool(summary_text and raw_text and summary_text != raw_text)
 
-                    with st.expander(f"👤 {reporter}{src_display}"):
-                        st.markdown(f'<div class="ai-box">{content} {source_tag}</div>',
+                        src_tags = []
+                        if get_boss_checked(rec["fields"], cbf):
+                            src_tags.append("⭐ 负责人标记")
+                        if is_bp_hot(sf, get_bp_highlights(rec["fields"])):
+                            src_tags.append("🔥 BP重点聚焦")
+                        
+                        src = " | ".join(src_tags)
+                        src_display = f"  [{src}]" if src else ""
+
+                        source_tag = '<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✨ AI智能总结)</span>' if is_ai else ('<span style="font-size:0.75rem;color:#94a3b8;margin-left:8px;">(✍️ HRBP原文)</span>' if content and "该模块暂无汇报内容" not in content else '')
+
+                        st.markdown(f'<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-top:8px;">'
+                                    f'<div style="font-weight:600; font-size:1.05rem; color:#0f172a; margin-bottom:12px;">👤 {reporter}{src_display}</div>'
+                                    f'<div class="ai-box">{content} {source_tag}</div>',
                                     unsafe_allow_html=True)
                         if is_ai:
-                            st.markdown(f'<details style="margin-top:8px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开 HRBP 填写原文</summary><div style="margin-top:6px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:#f8f9fa; border:1px solid #e2e8f0; padding:12px; border-radius:6px; border-left:3px solid #cbd5e1;">{raw_text}</div></details>', unsafe_allow_html=True)
+                            st.markdown(f'<details style="margin-top:12px;"><summary style="cursor:pointer; color:#64748b; font-size:0.85rem; user-select:none; outline:none;">📝 展开 HRBP 填写原文</summary><div style="margin-top:8px; font-size:0.85rem; color:#475569; white-space:pre-wrap; background:#f1f5f9; padding:12px; border-radius:6px; border-left:3px solid #cbd5e1;">{raw_text}</div></details>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                
                 st.markdown("---")
 
     with tab1:
-        render_module_donuts(marketing, "marketing")
+        render_module_donuts(marketing, "营销", "marketing")
     with tab2:
-        render_module_donuts(rd, "rd")
+        render_module_donuts(rd, "研发", "rd")
 
 
 # ═══════════════════════════════════════════════
