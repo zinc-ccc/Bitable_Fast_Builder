@@ -289,7 +289,8 @@ def load_records():
         global BitableClient, bitable
         from core.bitable import BitableClient
         bitable = BitableClient()
-    return bitable.list_records(APP_TOKEN, TABLE_ID)
+    records = bitable.list_records(APP_TOKEN, TABLE_ID)
+    return records if records is not None else []
 
 @st.cache_data(ttl=3600)
 def get_global_agenda(records_str: str) -> str:
@@ -298,9 +299,11 @@ def get_global_agenda(records_str: str) -> str:
 
 
 def get_week_options(records):
+    if not records:
+        return []
     weeks = sorted(
         {extract_text(r["fields"].get(FIELD_WEEK_IDX, "")) for r in records
-         if r["fields"].get(FIELD_WEEK_IDX)},
+         if r.get("fields") and r["fields"].get(FIELD_WEEK_IDX)},
         reverse=True,
     )
     return weeks
@@ -746,6 +749,9 @@ else:
     week_records = all_records_raw
 
 week_records.sort(key=lambda x: x["fields"].get(FIELD_CREATE_TS, 0) or 0)
+
+if not all_records_raw:
+    st.info("💡 暂时还没有人填写任何记录，各视图的画板正在等待第一条数据的降临！")
 
 st.divider()
 
