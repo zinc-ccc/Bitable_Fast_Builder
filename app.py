@@ -6,12 +6,13 @@ HRBP 效能协同中心 - FastAPI 后端 v2
 - 写入白名单：只允许写 归档标识 和 AI议程建议
 """
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
+import time
 import requests as req_lib
 from core.bitable import BitableClient
 from core.ai_helper import AIHelper
@@ -27,6 +28,35 @@ _bitable = BitableClient()
 _ai = AIHelper()
 APP_TOKEN = _cfg["hrbp_dashboard"]["app_token"]
 TABLE_ID  = _cfg["hrbp_dashboard"]["table_id"]
+
+# --- Auth 配置 ---
+AUTH_CFG = _cfg.get("auth", {})
+BOSS_PWD = AUTH_CFG.get("boss_pwd", "boss")
+SCREEN_PWD = AUTH_CFG.get("screen_pwd", "screen")
+
+FAILED_ATTEMPTS: Dict[str, dict] = {}  # { ip: {"count": n, "lock_until": timestamp} }
+
+def verify_token(x_token: str = Header(None, alias="X-Token"), request: Request = None):
+    client_ip = request.client.host if request else "unknown"
+    now = time.time()
+    
+    # 检查锁定状态
+    ip_record = FAILED_ATTEMPTS.get(client_ip, {"count": 0, "lock_until": 0})
+    if now < ip_record["lock_until"]:
+        raise HTTPException(status_code=429, detail="尝试次数过多，请稍后再试")
+        
+    if not x_token or x_token not in [BOSS_PWD, SCREEN_PWD]:
+        ip_record["count"] += 1
+        if ip_record["count"] >= 10:
+            ip_record["lock_until"] = now + 900  # 锁定15分钟
+        FAILED_ATTEMPTS[client_ip] = ip_record
+        raise HTTPException(status_code=401, detail="凭证无效")
+        
+    # 重置失败次数
+    if client_ip in FAILED_ATTEMPTS:
+        FAILED_ATTEMPTS.pop(client_ip)
+        
+    return "boss" if x_token == BOSS_PWD else "screen"
 
 # --- 字段选项缓存（用于解码单选/多选的 option id → name）---
 _option_map: dict[str, str] = {}  # {option_id: option_name}
@@ -140,8 +170,17 @@ def build_record(r: dict) -> dict:
     }
 
 # --- API 路由 ---
+class LoginRequest(BaseModel):
+    password: str
+
+@app.post("/api/login")
+def login(req: LoginRequest, request: Request):
+    # 手动调用 verify_token
+    role = verify_token(x_token=req.password, request=request)
+    return {"ok": True, "role": role, "token": req.password}
+
 @app.get("/api/records")
-def get_records(week: Optional[str] = None):
+def get_records(week: Optional[str] = None, auth_role: str = Depends(verify_token)):
     raw = _bitable.list_records(APP_TOKEN, TABLE_ID)
     records = [build_record(r) for r in raw]
     if week:
@@ -150,7 +189,7 @@ def get_records(week: Optional[str] = None):
     return {"records": records, "total": len(records)}
 
 @app.get("/api/weeks")
-def get_weeks():
+def get_weeks(auth_role: str = Depends(verify_token)):
     raw = _bitable.list_records(APP_TOKEN, TABLE_ID)
     weeks = sorted(
         {build_record(r)["week"] for r in raw if build_record(r)["week"]},
@@ -159,7 +198,9 @@ def get_weeks():
     return {"weeks": weeks}
 
 @app.post("/api/refresh-fields")
-def refresh_fields():
+def refresh_fields(auth_role: str = Depends(verify_token)):
+    if auth_role != "boss":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
     """重新扫描字段选项（字段更新后调用）"""
     refresh_option_map()
     fields = _bitable.list_fields(APP_TOKEN, TABLE_ID)
@@ -171,7 +212,10 @@ class ArchiveRequest(BaseModel):
     reporter: str
 
 @app.post("/api/archive")
-def update_archive(req: ArchiveRequest):
+def update_archive(req: ArchiveRequest, auth_role: str = Depends(verify_token)):
+    # 如果不仅 boss 允许对齐，可根据需求修改；这里保险起见限制 boss
+    if auth_role != "boss":
+        raise HTTPException(status_code=403, detail="没有权限执行归档对齐")
     result = _bitable.update_record(APP_TOKEN, TABLE_ID, req.record_id, {"归档标识": req.value})
     if result.get("code") != 0:
         raise HTTPException(status_code=400, detail=result.get("msg", "更新失败"))
@@ -181,7 +225,9 @@ class AgendaRequest(BaseModel):
     week: Optional[str] = None
 
 @app.post("/api/generate-agenda")
-def generate_agenda(req: AgendaRequest):
+def generate_agenda(req: AgendaRequest, auth_role: str = Depends(verify_token)):
+    if auth_role != "boss":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
     raw = _bitable.list_records(APP_TOKEN, TABLE_ID)
     records = [build_record(r) for r in raw]
     if req.week:

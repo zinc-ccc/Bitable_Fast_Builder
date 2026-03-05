@@ -116,9 +116,19 @@ def _get_dashboard_config():
 
 def _get_boss_password():
     try:
-        return st.secrets.get("access", {}).get("boss_password", "")
+        pw = st.secrets.get("access", {}).get("boss_password", "")
+        if pw: return pw
     except Exception:
-        return ""
+        pass
+    return "Hannah.Wei"  # 默认回退使用指定的密码
+
+def _get_screen_password():
+    try:
+        pw = st.secrets.get("access", {}).get("screen_password", "")
+        if pw: return pw
+    except Exception:
+        pass
+    return "fjd_hrbp_03"
 
 
 # ═══════════════════════════════════════════════
@@ -352,11 +362,33 @@ def check_boss_password(key_suffix: str) -> bool:
     if st.session_state.get("boss_authed"):
         return True
     st.markdown('<div class="pw-box">', unsafe_allow_html=True)
-    st.markdown("🔐 **系统检测到安全拦截，请输入管理密钥**")
+    st.markdown("🔐 **系统检测到安全拦截，请输入[管理员]密钥**")
     pw = st.text_input("密钥", type="password", key=f"pw_input_{key_suffix}", label_visibility="collapsed")
     if st.button("效验授权", key=f"pw_btn_{key_suffix}", use_container_width=True):
         if pw == boss_pw:
             st.session_state["boss_authed"] = True
+            st.session_state["screen_authed"] = True
+            st.rerun()
+        else:
+            st.error("密钥验证失败，请重试")
+    st.markdown("</div>", unsafe_allow_html=True)
+    return False
+
+def check_screen_password(key_suffix: str) -> bool:
+    screen_pw = _get_screen_password()
+    boss_pw = _get_boss_password()
+    if not screen_pw:
+        return True
+    if st.session_state.get("screen_authed") or st.session_state.get("boss_authed"):
+        return True
+    st.markdown('<div class="pw-box">', unsafe_allow_html=True)
+    st.markdown("👁️ **安全保护，这里是[周会投屏]权限保护区**")
+    pw = st.text_input("组别密钥", type="password", key=f"pw_input_{key_suffix}", label_visibility="collapsed", placeholder="请输入投屏密码或boss密码...")
+    if st.button("效验授权", key=f"pw_btn_{key_suffix}", use_container_width=True):
+        if pw == screen_pw or pw == boss_pw:
+            st.session_state["screen_authed"] = True
+            if pw == boss_pw:
+                st.session_state["boss_authed"] = True
             st.rerun()
         else:
             st.error("密钥验证失败，请重试")
@@ -516,6 +548,9 @@ def render_review_view(records, modules):
 # VIEW 2: 周会投屏展示
 # ═══════════════════════════════════════════════
 def render_screen_view(records, modules):
+    if not check_screen_password("screen"):
+        return
+
     st.markdown('<div class="view-title">🎯 周会投屏展示</div>',
                 unsafe_allow_html=True)
 
@@ -799,7 +834,7 @@ with ctrl_col1:
 with ctrl_col2:
     if st.button("🔄 同步最新数据", help="点击拉取飞书最新数据的同时，会自动触发并更新所有待补充的AI提炼摘要！"):
         with st.spinner("🤖 正在唤醒 AI 助手秒级清理和审查当周填答..."):
-            from scripts.run_ai_summarize import run_summarize
+            from scripts.automation.run_ai_summarize import run_summarize
             try:
                 run_summarize(APP_TOKEN, TABLE_ID, verbose=False)
             except Exception as e:
