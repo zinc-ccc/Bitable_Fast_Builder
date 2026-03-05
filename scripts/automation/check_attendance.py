@@ -48,7 +48,7 @@ def run_attendance_check():
     all_bps = {} # {name: open_id}
     
     # 排除名单
-    EXCLUDE_LIST = ["Hannah.Wei", "Maia"]
+    EXCLUDE_LIST = ["Hannah.Wei", "Maia", "Shimmer.Liu", "Shimmer"]
     
     for r in bp_records:
         f = r.get("fields", {})

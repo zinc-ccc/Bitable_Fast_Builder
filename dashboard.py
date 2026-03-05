@@ -122,6 +122,9 @@ def _get_boss_password():
         pass
     return "Hannah.Wei@FJD"
 
+# 排除名单
+EXCLUDE_LIST = ["Hannah.Wei", "Maia", "Shimmer.Liu", "Shimmer"]
+
 def _get_screen_password():
     try:
         pw = st.secrets.get("access", {}).get("screen_password", "")
@@ -863,16 +866,7 @@ with ctrl_col3:
         st.session_state.pop("screen_authed", None)
         st.rerun()
 with ctrl_col4:
-    show_logs = st.toggle("📄 显示操作日志", value=False)
     st.caption(f"共扫描 {len(all_records_raw)} 条记录")
-
-if show_logs:
-    with st.expander("📝 实时操作日志", expanded=True):
-        if "op_logs" not in st.session_state or not st.session_state["op_logs"]:
-            st.write("暂无日志记录")
-        else:
-            for log in reversed(st.session_state["op_logs"]):
-                st.text(log)
 
 # 筛选当周，按提交时间升序
 if selected_week != "全部（含历史）":
