@@ -42,6 +42,12 @@ python scripts/automation/run_ai_summarize.py
 ```
 *   **功能**：立即扫描所有最新填报，强制唤醒 AI 生成摘要和议程建议。
 
+### 3. 周会前置：负责人数据透视 (18:55 运行)
+```powershell
+python scripts/automation/boss_premeeting_push.py
+```
+*   **功能**：向 Hannah 私信推送本周各组填写详情（列出未填名单）、看板链接、密码及今日重点议题提醒。
+
 ---
 
 ## 🤖 机器人配置

@@ -14,15 +14,15 @@ def debug():
     for t in client.list_tables(app_token):
         if "BP配置" in t.get("name", ""):
             table_id = t["table_id"]
-            print(f"Found table: {t['name']} ({table_id})")
             
     if table_id:
         records = client.list_records(app_token, table_id)
         for r in records:
             f = r.get("fields", {})
             name = f.get('HRBP') or f.get('姓名')
-            status = f.get('在职状态')
-            print(f"Name: {name} | Status: {status}")
+            uid = f.get('人员ID')
+            group = f.get('所属小组')
+            print(f"Name: {name} | UID: {uid} | Group: {group}")
 
 if __name__ == "__main__":
     debug()
