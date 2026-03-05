@@ -400,9 +400,6 @@ def check_screen_password(key_suffix: str) -> bool:
 # VIEW 1: 负责人审阅
 # ═══════════════════════════════════════════════
 def render_review_view(records, modules):
-    if not check_boss_password("review"):
-        return
-
     st.markdown('<div class="view-title">📊 负责人审阅</div>',
                 unsafe_allow_html=True)
 
@@ -548,9 +545,6 @@ def render_review_view(records, modules):
 # VIEW 2: 周会投屏展示
 # ═══════════════════════════════════════════════
 def render_screen_view(records, modules):
-    if not check_screen_password("screen"):
-        return
-
     st.markdown('<div class="view-title">🎯 周会投屏展示</div>',
                 unsafe_allow_html=True)
 
@@ -753,9 +747,6 @@ def render_screen_view(records, modules):
 # VIEW 3: 过往数据回溯
 # ═══════════════════════════════════════════════
 def render_history_view(all_records, modules):
-    if not check_boss_password("history"):
-        return
-
     st.markdown('<div class="view-title">📈 过往数据回溯</div>',
                 unsafe_allow_html=True)
 
@@ -818,8 +809,30 @@ def render_history_view(all_records, modules):
 # ═══════════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════════
-st.title("📊 HRBP 周会看板")
+st.title("📊 HRBP 周会协同中心")
 
+# --- 统一入口鉴权 ---
+if "boss_authed" not in st.session_state and "screen_authed" not in st.session_state:
+    st.markdown('<div class="pw-box">', unsafe_allow_html=True)
+    st.markdown("### 🔐 系统访问保护")
+    st.markdown("请输入访问密码以解锁看板内容")
+    pwd = st.text_input("访问密码", type="password", key="main_login_pwd", label_visibility="collapsed", placeholder="输入 Hannah 密码或投屏密码...")
+    if st.button("验证并进入", use_container_width=True):
+        boss_pw = _get_boss_password()
+        screen_pw = _get_screen_password()
+        if pwd == boss_pw:
+            st.session_state["boss_authed"] = True
+            st.session_state["screen_authed"] = True
+            st.rerun()
+        elif pwd == screen_pw:
+            st.session_state["screen_authed"] = True
+            st.rerun()
+        else:
+            st.error("密码不正确")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
+# --- 已登录展示内容 ---
 modules = scan_modules()
 
 ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([3, 1, 1, 1])
@@ -842,10 +855,10 @@ with ctrl_col2:
         load_records.clear()
         st.rerun()
 with ctrl_col3:
-    if st.session_state.get("boss_authed"):
-        if st.button("🔓 退出管理权限"):
-            st.session_state.pop("boss_authed", None)
-            st.rerun()
+    if st.button("🔓 退出登录"):
+        st.session_state.pop("boss_authed", None)
+        st.session_state.pop("screen_authed", None)
+        st.rerun()
 with ctrl_col4:
     st.caption(f"共扫描 {len(all_records_raw)} 条记录")
 
@@ -866,10 +879,17 @@ st.divider()
 view_tab1, view_tab2, view_tab3 = st.tabs(["📊 负责人审阅", "🎯 周会投屏展示", "📈 过往数据回溯"])
 
 with view_tab1:
-    render_review_view(week_records, modules)
+    if not st.session_state.get("boss_authed"):
+        st.warning("⚠️ 此视图仅限负责人（Hannah）访问。你当前的角色权限不足，请退出并使用管理员密码重新登录。")
+    else:
+        render_review_view(week_records, modules)
 
 with view_tab2:
+    # 只要登录了（无论是boss还是screen），都可以看投屏
     render_screen_view(week_records, modules)
 
 with view_tab3:
-    render_history_view(all_records_raw, modules)
+    if not st.session_state.get("boss_authed"):
+        st.warning("⚠️ 此视图仅限负责人（Hannah）访问。")
+    else:
+        render_history_view(all_records_raw, modules)

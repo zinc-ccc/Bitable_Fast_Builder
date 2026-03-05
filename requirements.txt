@@ -5,3 +5,7 @@ openai
 streamlit
 plotly
 lark-oapi
+fastapi
+uvicorn
+python-multipart
+pydantic
