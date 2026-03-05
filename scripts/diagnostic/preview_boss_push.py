@@ -10,21 +10,17 @@ sys.path.insert(0, os.getcwd())
 
 from core.bitable import BitableClient
 
-def send_boss_premeeting_push():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting Boss Pre-meeting Push...")
-    
+def preview_boss_push():
     with open("configs/config.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     
     app_token = cfg["hrbp_dashboard"]["app_token"]
     table_id = cfg["hrbp_dashboard"]["table_id"]
-    hannah_uid = "ou_d302eccaa2165cd781a2bac438973166"
     board_url = "https://fjd-hrbp-weekly-board.streamlit.app/"
     boss_pwd = "Hannah.Wei@FJD"
     
     bitable = BitableClient()
     
-    # 1. 获取在职 BP 分组信息
     bp_config_id = ""
     for t in bitable.list_tables(app_token):
         if "BP配置" in t.get("name", ""):
@@ -40,24 +36,16 @@ def send_boss_premeeting_push():
         name_raw = f.get("HRBP") or f.get("姓名")
         group_raw = f.get("组别") or "其他"
         status = f.get("在职状态")
-        
         if not name_raw or status in ["离职", "已离职"]: continue
-        
-        # Extract Name
         if isinstance(name_raw, list): name_text = name_raw[0].get("text", "")
         elif isinstance(name_raw, dict): name_text = name_raw.get("text", "")
         else: name_text = str(name_raw)
-        
         if any(ex in name_text for ex in EXCLUDE_LIST): continue
-        
-        # Extract Group (组别)
         if isinstance(group_raw, list): g_text = group_raw[0].get("text", group_raw[0].get("name", "其他"))
         elif isinstance(group_raw, dict): g_text = group_raw.get("text", group_raw.get("name", "其他"))
         else: g_text = str(group_raw)
-        
         group_map[g_text].append(name_text)
 
-    # 2. 扫描本周已填
     dt = datetime.now()
     week_of_month = (dt.day - 1) // 7 + 1
     current_week_idx = f"{str(dt.year)[-2:]}M{dt.month}W{week_of_month}"
@@ -73,7 +61,6 @@ def send_boss_premeeting_push():
             else: r_name = str(reporter)
             submitted_names.add(r_name)
 
-    # 3. 统计各组情况
     stats_lines = []
     for group_name in sorted(group_map.keys()):
         members = group_map[group_name]
@@ -84,7 +71,6 @@ def send_boss_premeeting_push():
             line += f"\n  （未填：{', '.join(not_done)}）"
         stats_lines.append(line)
 
-    # 4. 组装消息 (纯净版，发送给位晴)
     stats_content = "\n".join(stats_lines)
     msg = (
         f"👋 位晴您好，系统已为您准备好本周周会的看板数据，请通过指引进行审阅。\n\n"
@@ -100,8 +86,9 @@ def send_boss_premeeting_push():
         f"祝周会高效！"
     )
     
-    res = bitable.send_message(hannah_uid, "open_id", msg)
-    print(f"Boss Push Result: {res}")
+    print("\n" + "--- 消息预览 (正式外发版) ---" + "\n")
+    print(msg)
+    print("\n" + "--- 预览结束 ---" + "\n")
 
 if __name__ == "__main__":
-    send_boss_premeeting_push()
+    preview_boss_push()
