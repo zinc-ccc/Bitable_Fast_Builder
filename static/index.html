@@ -436,6 +436,14 @@
 
       await loadWeeks();
       await loadData();
+
+      // 每 60 秒自动刷新一次数据，保持看板最新
+      setInterval(() => {
+        if (!document.hidden && currentView !== 'history') {
+          console.log('Auto-refreshing data...');
+          loadData();
+        }
+      }, 60000);
     }
 
     async function loadWeeks() {
