@@ -120,7 +120,7 @@ def _get_boss_password():
         if pw: return pw
     except Exception:
         pass
-    return "Hannah.Wei"  # 默认回退使用指定的密码
+    return "Hannah.Wei@FJD"
 
 def _get_screen_password():
     try:
@@ -128,7 +128,7 @@ def _get_screen_password():
         if pw: return pw
     except Exception:
         pass
-    return "fjd_hrbp_03"
+    return "fjd_hrbp_2026"
 
 
 # ═══════════════════════════════════════════════
@@ -816,7 +816,7 @@ if "boss_authed" not in st.session_state and "screen_authed" not in st.session_s
     st.markdown('<div class="pw-box">', unsafe_allow_html=True)
     st.markdown("### 🔐 系统访问保护")
     st.markdown("请输入访问密码以解锁看板内容")
-    pwd = st.text_input("访问密码", type="password", key="main_login_pwd", label_visibility="collapsed", placeholder="输入 Hannah 密码或投屏密码...")
+    pwd = st.text_input("访问密码", type="password", key="main_login_pwd", label_visibility="collapsed", placeholder="输入有效密码...")
     if st.button("验证并进入", use_container_width=True):
         boss_pw = _get_boss_password()
         screen_pw = _get_screen_password()
@@ -835,7 +835,7 @@ if "boss_authed" not in st.session_state and "screen_authed" not in st.session_s
 # --- 已登录展示内容 ---
 modules = scan_modules()
 
-ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([3, 1, 1, 1])
+ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2, 1, 1, 1])
 with ctrl_col1:
     all_records_raw = load_records()
     week_opts = get_week_options(all_records_raw)
@@ -845,13 +845,16 @@ with ctrl_col1:
         index=1 if week_opts else 0,
     )
 with ctrl_col2:
-    if st.button("🔄 同步最新数据", help="点击拉取飞书最新数据的同时，会自动触发并更新所有待补充的AI提炼摘要！"):
-        with st.spinner("🤖 正在唤醒 AI 助手秒级清理和审查当周填答..."):
+    if st.button("🔄 同步最新数据"):
+        if "op_logs" not in st.session_state: st.session_state["op_logs"] = []
+        st.session_state["op_logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ 开始同步飞书数据 & 唤醒 AI...")
+        with st.spinner("🤖 正在唤醒 AI 助手..."):
             from scripts.automation.run_ai_summarize import run_summarize
             try:
-                run_summarize(APP_TOKEN, TABLE_ID, verbose=False)
+                res = run_summarize(APP_TOKEN, TABLE_ID, verbose=False)
+                st.session_state["op_logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ {res}")
             except Exception as e:
-                st.error(f"AI触发失败: {e}")
+                st.session_state["op_logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ 失败: {e}")
         load_records.clear()
         st.rerun()
 with ctrl_col3:
@@ -860,7 +863,16 @@ with ctrl_col3:
         st.session_state.pop("screen_authed", None)
         st.rerun()
 with ctrl_col4:
+    show_logs = st.toggle("📄 显示操作日志", value=False)
     st.caption(f"共扫描 {len(all_records_raw)} 条记录")
+
+if show_logs:
+    with st.expander("📝 实时操作日志", expanded=True):
+        if "op_logs" not in st.session_state or not st.session_state["op_logs"]:
+            st.write("暂无日志记录")
+        else:
+            for log in reversed(st.session_state["op_logs"]):
+                st.text(log)
 
 # 筛选当周，按提交时间升序
 if selected_week != "全部（含历史）":
