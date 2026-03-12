@@ -803,7 +803,7 @@ def render_history_view(all_records, modules):
             default=week_options[:2] if len(week_options) >= 2 else week_options,
         )
     with col2:
-        group_filter = st.selectbox("组别筛选", ["全部", "营销组", "研发组"])
+        group_filter = st.selectbox("组别筛选", ["全部", "营销组", "研发组", "培训组"])
 
     tab_a, tab_b = st.tabs(["🤖 AI 智能过往简报", "⏳ 业务模块时光轴"])
 
