@@ -85,6 +85,14 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
             padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
 .tag-boss { background: #22c55e; color: #fff; border-radius: 6px;
             padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
+.tag-training { background: #8b5cf6; color: #fff; border-radius: 6px;
+            padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
+.module-training {
+    background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    border-left: 4px solid #8b5cf6; padding: 12px 16px;
+    border-radius: 0 10px 10px 0; margin: 8px 0; color: #1e293b;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
 .tag-normal { background: #e2e8f0; color: #475569; border-radius: 6px;
               padding: 4px 10px; font-size: 0.8rem; font-weight: 600; margin-right: 6px; }
 .pw-box {
@@ -123,7 +131,8 @@ def _get_boss_password():
     return "Hannah.Wei@FJD"
 
 # 排除名单
-EXCLUDE_LIST = ["Hannah.Wei", "Maia", "Shimmer.Liu", "Shimmer"]
+# 排除名单 (Maia 现在作为培训组汇报，不再全局排除)
+EXCLUDE_LIST = ["Hannah.Wei", "Shimmer.Liu", "Shimmer"]
 
 def _get_screen_password():
     try:
@@ -179,8 +188,8 @@ def scan_modules():
     all_fields = bitable.list_fields(APP_TOKEN, TABLE_ID)
     field_by_name = {f["field_name"]: f for f in all_fields}
 
-    # 按照老板要求严格限定顺序
-    ORDER = ["招聘", "Agent", "人员", "业务", "专项", "卡点计划"]
+    # 按照老板要求严格限定顺序 (加入培训专项)
+    ORDER = ["招聘", "Agent", "人员", "业务", "专项", "学习系统", "培训赋能", "团队其他", "卡点计划"]
 
     summary_names = [f["field_name"] for f in all_fields if f["field_name"].startswith("摘要_")]
     def get_order_idx(name: str) -> int:
@@ -196,7 +205,10 @@ def scan_modules():
     checkbox_names = {f["field_name"] for f in all_fields
                       if f["field_name"].startswith("需汇报_")}
 
-    emoji_map = {"招聘": "📋", "Agent": "🤖", "人员": "👥", "业务": "💼", "专项": "📌", "卡点计划": "📅"}
+    emoji_map = {
+        "招聘": "📋", "Agent": "🤖", "人员": "👥", "业务": "💼", "专项": "📌", "卡点计划": "📅",
+        "学习系统": "📚", "培训赋能": "🎓", "团队其他": "🤝"
+    }
 
     modules = []
     for sf in summary_names:
@@ -410,11 +422,19 @@ def render_review_view(records, modules):
     # 注：现在挪到底下的 render_group_cards 内部实现了总分结构。
 
     # ── 分组
-    marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
-    rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
-    other     = [r for r in records if r not in marketing and r not in rd]
+    def get_group_name(r):
+        g = extract_text(r["fields"].get(FIELD_GROUP, ""))
+        if "营销" in g: return "营销"
+        if "研发" in g: return "研发"
+        if "培训" in g: return "培训"
+        return "其它"
 
-    tab1, tab2 = st.tabs(["🏪 营销组", "💻 研发组"])
+    marketing = [r for r in records if get_group_name(r) == "营销"]
+    rd        = [r for r in records if get_group_name(r) == "研发"]
+    training  = [r for r in records if get_group_name(r) == "培训"]
+    other     = [r for r in records if r not in marketing and r not in rd and r not in training]
+
+    tab1, tab2, tab3 = st.tabs(["🏪 营销组", "💻 研发组", "🎓 培训组"])
 
     def render_group_cards(group_records, group_label=""):
         if not group_records:
@@ -467,6 +487,9 @@ def render_review_view(records, modules):
                         continue  # 无内容 → 不渲染
                     boss_chk = get_boss_checked(f, cbf)
                     bp_hot_flag = is_bp_hot(sf, bp_hot)
+                    if "培训" in get_group_name(rec):
+                        tags_html += f'<span class="tag-training">🎓 Training</span>'
+                    
                     if boss_chk:
                         tags_html += f'<span class="tag-boss">⭐ {label}</span>'
                     elif bp_hot_flag:
@@ -492,7 +515,10 @@ def render_review_view(records, modules):
                     if bp_hot_flag:
                         src_tags.append("🔥 BP重点聚焦")
                         if not boss_chk:
-                            div_cls = "module-hot"
+                            if "培训" in get_group_name(rec):
+                                div_cls = "module-training"
+                            else:
+                                div_cls = "module-hot"
                             
                     flag = " | ".join(src_tags) + " | " if src_tags else ""
 
@@ -539,6 +565,8 @@ def render_review_view(records, modules):
         render_group_cards(marketing, "营销")
     with tab2:
         render_group_cards(rd, "研发")
+    with tab3:
+        render_group_cards(training, "培训")
     if other:
         st.markdown("### 其他")
         render_group_cards(other, "其他")
@@ -553,10 +581,18 @@ def render_screen_view(records, modules):
 
     # ── AI 议程（全局汇报） - 等待后续具体按组别渲染
 
-    marketing = [r for r in records if "营销" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
-    rd        = [r for r in records if "研发" in extract_text(r["fields"].get(FIELD_GROUP, ""))]
+    def get_group_name(r):
+        g = extract_text(r["fields"].get(FIELD_GROUP, ""))
+        if "营销" in g: return "营销"
+        if "研发" in g: return "研发"
+        if "培训" in g: return "培训"
+        return "其它"
 
-    tab1, tab2 = st.tabs(["🏪 营销组", "💻 研发组"])
+    marketing = [r for r in records if get_group_name(r) == "营销"]
+    rd        = [r for r in records if get_group_name(r) == "研发"]
+    training  = [r for r in records if get_group_name(r) == "培训"]
+
+    tab1, tab2, tab3 = st.tabs(["🏪 营销组", "💻 研发组", "🎓 培训组"])
 
     def effective_module_recs(group_records, sf, cbf) -> list:
         """
@@ -744,6 +780,8 @@ def render_screen_view(records, modules):
         render_module_donuts(marketing, "营销", "marketing")
     with tab2:
         render_module_donuts(rd, "研发", "rd")
+    with tab3:
+        render_module_donuts(training, "培训", "training")
 
 
 # ═══════════════════════════════════════════════

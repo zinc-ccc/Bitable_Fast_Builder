@@ -116,10 +116,11 @@ def _compute_content_hash(module_texts: dict) -> str:
 
 # ── 主函数 ──────────────────────────────────────────────
 def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = True,
-                  force: bool = False) -> str:
+                  force: bool = False, week: str = "current") -> str:
     """
     扫描、摘要、生成议程。
     force=True 时强制重新生成所有已有摘要。
+    week: 'current' (默认，仅扫描本周), 'all' (扫描所有历史记录), 或具体周索引如 '26M3W1'
     """
     cfg = _get_config()
     if not app_token:
@@ -129,6 +130,13 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
 
     bitable = BitableClient()
     ai = AIHelper()
+
+    # 计算本周索引
+    dt_now = datetime.now()
+    week_of_month = (dt_now.day - 1) // 7 + 1
+    current_week_idx = f"{str(dt_now.year)[-2:]}M{dt_now.month}W{week_of_month}"
+    
+    target_week = current_week_idx if week == "current" else (None if week == "all" else week)
 
     # 1. 扫描字段，动态构建映射
     if verbose:
@@ -140,13 +148,21 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
 
     # 2. 读取记录
     if verbose:
-        print(f"\n📋 读取周报记录...")
+        msg = f"仅限本周 ({current_week_idx})" if week == "current" else (f"周索引: {week}" if target_week else "所有周次")
+        print(f"\n📋 读取周报记录 ({msg})...")
+    
     records = bitable.list_records(app_token, table_id)
     if not records:
         return "周报表暂无记录。"
 
+    # 过滤记录
+    if target_week:
+        records = [r for r in records if _extract_text(r.get("fields", {}).get("周索引", "")) == target_week]
+        if not records:
+            return f"未找到 {target_week} 的任何记录，跳过处理。"
+
     if verbose:
-        print(f"  共 {len(records)} 条记录，开始处理...\n")
+        print(f"  待处理记录: {len(records)} 条\n")
 
     updates_needed = []           # [{record_id, fields}]
     agenda_source_parts = []      # 用于生成议程的原始内容聚合
@@ -273,4 +289,20 @@ def run_summarize(app_token: str = None, table_id: str = None, verbose: bool = T
 
 
 if __name__ == "__main__":
-    print(run_summarize(verbose=True))
+    import argparse
+    parser = argparse.ArgumentParser(description="HRBP AI 摘要与议程自动处理脚本")
+    parser.add_argument("--force", action="store_true", help="强制重新生成所有摘要，忽略哈希指纹和空判断")
+    parser.add_argument("--week", default="current", help="扫描范围：'current' (默认，本周), 'all' (所有记录), 或具体周索引 (如 26M3W1)")
+    parser.add_argument("--app-token", help="目标多维表的 App Token")
+    parser.add_argument("--table-id", help="目标多维表的 Table ID")
+    parser.add_argument("--quiet", action="store_true", help="减少日志输出")
+    
+    args = parser.parse_args()
+    
+    print(run_summarize(
+        app_token=args.app_token,
+        table_id=args.table_id,
+        verbose=not args.quiet,
+        force=args.force,
+        week=args.week
+    ))

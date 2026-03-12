@@ -40,13 +40,23 @@ python scripts/automation/status_report.py
 ```powershell
 python scripts/automation/run_ai_summarize.py
 ```
-*   **功能**：立即扫描所有最新填报，强制唤醒 AI 生成摘要和议程建议。
+*   **功能**：立即对**本周**记录进行 AI 摘要和议程生成。
+*   **优化参数**：
+    *   `--week all`: 扫描历史所有记录（慎用，消耗较大）。
+    *   `--force`: 强制覆盖已有摘要（即使内容未变）。
+    *   `--week 26M3W1`: 扫描指定周次。
 
-### 3. 周会前置：负责人数据透视 (18:55 运行)
+### 3. 常驻高频调度器 (周四晚专用)
+```powershell
+python scripts/automation/ai_scheduler.py
+```
+*   **功能**：启动后会根据当前时间自动切换频率。周四 18:00-20:00 每分钟抓取一次，确保周会期间看板数据“秒级”更新。
+
+### 4. 周会前置：负责人数据透视 (18:55 运行)
 ```powershell
 python scripts/automation/boss_premeeting_push.py
 ```
-*   **功能**：向 Hannah 私信推送本周各组填写详情（列出未填名单）、看板链接、密码及今日重点议题提醒。
+*   **功能**：向位晴私信推送本周各组填写详情、看板链接、密码及今日重点议题提醒。
 
 ---
 
@@ -56,7 +66,7 @@ python scripts/automation/boss_premeeting_push.py
 - **角色**：系统自动同步员、周报提醒官。
 - **维护项**：
     - 已开启飞书多维表 **“编辑者”** 权限。
-    - 负责每周三 14:00 发起私信提醒。
+    - 网页前端已配置 **1分钟自动刷新**，无需手动按 F5。
 
 ---
 
@@ -64,7 +74,7 @@ python scripts/automation/boss_premeeting_push.py
 
 - **自动排除名单**：`Hannah.Wei`, `Maia.Yuan`, `Shimmer.Liu`。
 - **离职逻辑**：系统会自动扫描“BP配置中心”表的“在职状态”，标记为“离职”的人员将不再计入应交人数。
-- **填报周次**：系统自动按当前系统日期计算所属月度和周次（例如：`26M3W1`）。
+- **填报周次**：系统自动按当前系统日期计算所属月度和周次（例如：`26M3W1`），AI 扫描默认仅处理当周数据。
 
 ---
 
